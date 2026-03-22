@@ -1,0 +1,43 @@
+{
+  "name": "ibs-ratantextile-backend",
+  "version": "1.0.0",
+  "description": "HMVC backend designed for Ratan Textile innovation",
+  "main": "start.js",
+  "type": "commonjs",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon start.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anirudh-ibirds/ibs-ratantextile-backend.git"
+  },
+  "keywords": [
+    "iBirds",
+    "Ratan",
+    "Textile"
+  ],
+  "author": "iBirds",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/anirudh-ibirds/ibs-ratantextile-backend/issues"
+  },
+  "homepage": "https://github.com/anirudh-ibirds/ibs-ratantextile-backend#readme",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.13.6",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.3.1",
+    "express": "^5.1.0",
+    "file-saver": "^2.0.5",
+    "init": "^0.1.2",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.1",
+    "nodemailer": "^7.0.4",
+    "nodemon": "^3.1.10",
+    "pg": "^8.16.3",
+    "xlsx": "^0.18.5"
+  }
+}
