@@ -1,4 +1,4 @@
-const walletService = require('./wallet.service');
+const walletService = require('./wallet.modal');
 
 exports.getWallet = async (req, res) => {
     try {

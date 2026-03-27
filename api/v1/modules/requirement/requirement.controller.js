@@ -1,5 +1,5 @@
 const aiService = require('../ai/ai.service');
-const RequirementService = require('./requirement.service');
+const RequirementService = require('./requirement.modal');
 
 exports.createRequirement = async (req, res) => {
   try {

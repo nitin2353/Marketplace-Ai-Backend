@@ -1,5 +1,5 @@
 const pool = require('../../../../config/database');
-const walletService = require('../wallet/wallet.service');
+const walletService = require('../wallet/wallet.modal');
 
 
 exports.createPayment = async ({ order_id, amount, method }) => {

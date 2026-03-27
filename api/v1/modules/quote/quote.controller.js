@@ -1,4 +1,4 @@
-const quoteService = require('./quote.service');
+const quoteService = require('./quote.modal');
 
 // Create Quote
 exports.createQuote = async (req, res) => {

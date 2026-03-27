@@ -1,4 +1,4 @@
-const paymentService = require('./payment.service');
+const paymentService = require('./payment.modal');
 
 exports.createPayment = async (req, res) => {
     try {
