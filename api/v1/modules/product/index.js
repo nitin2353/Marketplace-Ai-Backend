@@ -5,6 +5,9 @@ const authMiddleware = require("../middlewares/index");
 const upload = require("../middlewares/multer");
 
 router.get("/", authMiddleware, productController.handleGetProducts)
+router.get("/search", authMiddleware, productController.handleFindByQuery)
+router.get("/suggest", authMiddleware, productController.handleFindListByQuery)
+router.get("/:id", authMiddleware, productController.handleGetProductById)
 router.put("/:id", authMiddleware, upload.array('images' ,5), productController.updateProduct)
 router.post("/create", authMiddleware, upload.array("images", 5), productController.createProduct);
 router.delete("/:id", authMiddleware, productController.handleDeleteProduct)

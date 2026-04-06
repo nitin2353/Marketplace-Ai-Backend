@@ -1,61 +1,453 @@
-const orderService = require('./order.modal');
+const orderService = require("./order.modal");
 
+// =====================================
+// CREATE ORDER
+// =====================================
 exports.createOrder = async (req, res) => {
     try {
-        const { quote_id, user_id } = req.body;
+        const {
+            address_id,
+            payment_method,
+            payment_gateway,
+            payment_order_id,
+            payment_id,
+            payment_signature,
+            notes
+        } = req.body;
 
-        const data = await orderService.createOrder({ quote_id, user_id });
+        const user_id = req.user?.id || null;
 
-        res.json({ success: true, data });
 
+        const created_by = req.user?.id || req.body.created_by || null;
+        const modified_by = req.user?.id || req.body.modified_by || null;
+
+        if (!user_id) {
+            return res.status(400).json({
+                success: false,
+                message: "user_id is required"
+            });
+        }
+
+        if (!address_id) {
+            return res.status(400).json({
+                success: false,
+                message: "address_id is required"
+            });
+        }
+
+        if (!payment_method) {
+            return res.status(400).json({
+                success: false,
+                message: "payment_method is required"
+            });
+        }
+
+        const allowedPaymentMethods = ["cod", "upi", "card", "netbanking", "wallet"];
+        if (!allowedPaymentMethods.includes(payment_method)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment method"
+            });
+        }
+
+        const data = await orderService.createOrderFromCart({
+            user_id,
+            address_id,
+            payment_method,
+            payment_gateway,
+            payment_order_id,
+            payment_id,
+            payment_signature,
+            notes,
+            created_by,
+            modified_by
+        });
+
+        return res.status(201).json({
+            success: true,
+            message: "Order created successfully",
+            data
+        });
     } catch (err) {
-        res.status(500).json({
+        console.error("CREATE ORDER ERROR:", err);
+        return res.status(500).json({
             success: false,
-            error: err.message
+            message: err.message || "Internal Server Error"
         });
     }
 };
 
-
+// =====================================
+// GET CUSTOMER ORDERS
+// =====================================
 exports.getCustomerOrders = async (req, res) => {
     try {
-        const data = await orderService.getCustomerOrders(req.params.user_id);
+        const { user_id } = req.params;
 
-        res.json({ success: true, data });
+        const data = await orderService.getCustomerOrders(user_id);
 
+        return res.status(200).json({
+            success: true,
+            message: "Customer orders fetched successfully",
+            data
+        });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error("GET CUSTOMER ORDERS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// GET SINGLE CUSTOMER ORDER
+// =====================================
+exports.getCustomerOrderById = async (req, res) => {
+    try {
+        const { user_id, order_id } = req.params;
+
+        const data = await orderService.getCustomerOrderById(user_id, order_id);
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Customer order fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET CUSTOMER ORDER BY ID ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
     }
 };
 
 
 exports.getSellerOrders = async (req, res) => {
     try {
-        const data = await orderService.getSellerOrders(req.params.seller_id);
+        const { seller_id } = req.params;
 
-        res.json({ success: true, data });
+        const data = await orderService.getSellerOrders(seller_id);
 
+        return res.status(200).json({
+            success: true,
+            message: "Seller orders fetched successfully",
+            data
+        });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error("GET SELLER ORDERS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
     }
 };
 
 
+exports.getSellerOrderById = async (req, res) => {
+    try {
+        const { seller_id, order_id } = req.params;
+
+        const data = await orderService.getSellerOrderById(seller_id, order_id);
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Seller order fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET SELLER ORDER BY ID ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// GET FULL ORDER DETAILS
+// =====================================
+exports.getOrderById = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const data = await orderService.getOrderById(order_id);
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Order not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Order fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET ORDER BY ID ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// GET ORDER ITEMS
+// =====================================
+exports.getOrderItems = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const data = await orderService.getOrderItems(order_id);
+
+        return res.status(200).json({
+            success: true,
+            message: "Order items fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET ORDER ITEMS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// GET ORDER ADDRESS SNAPSHOT
+// =====================================
+exports.getOrderAddressSnapshot = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const data = await orderService.getOrderAddressSnapshot(order_id);
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Address snapshot not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Order address snapshot fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET ORDER ADDRESS SNAPSHOT ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// GET ORDER USER SNAPSHOT
+// =====================================
+exports.getOrderUserSnapshot = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const data = await orderService.getOrderUserSnapshot(order_id);
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "User snapshot not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Order user snapshot fetched successfully",
+            data
+        });
+    } catch (err) {
+        console.error("GET ORDER USER SNAPSHOT ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// UPDATE ORDER STATUS
+// =====================================
 exports.updateOrderStatus = async (req, res) => {
     try {
-        const { order_id, status } = req.body;
+        const { order_id } = req.params;
+        const { order_status } = req.body;
 
-        await orderService.updateStatus(order_id, status);
+        const modified_by = req.user?.id || req.body.modified_by || null;
 
-        res.json({
+        const allowedStatuses = [
+            "placed",
+            "confirmed",
+            "processing",
+            "shipped",
+            "delivered",
+            "cancelled",
+            "payment_failed"
+        ];
+
+        if (!order_status) {
+            return res.status(400).json({
+                success: false,
+                message: "order_status is required"
+            });
+        }
+
+        if (!allowedStatuses.includes(order_status)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid order status"
+            });
+        }
+
+        const data = await orderService.updateOrderStatus(order_id, order_status, modified_by);
+
+        return res.status(200).json({
             success: true,
-            message: "Order status updated"
+            message: "Order status updated successfully",
+            data
+        });
+    } catch (err) {
+        console.error("UPDATE ORDER STATUS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// UPDATE PAYMENT STATUS
+// =====================================
+exports.updatePaymentStatus = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const { payment_status } = req.body;
+
+        const modified_by = req.user?.id || req.body.modified_by || null;
+
+        const allowedPaymentStatuses = ["pending", "paid", "failed", "refunded", "cancelled"];
+
+        if (!payment_status) {
+            return res.status(400).json({
+                success: false,
+                message: "payment_status is required"
+            });
+        }
+
+        if (!allowedPaymentStatuses.includes(payment_status)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment status"
+            });
+        }
+
+        const data = await orderService.updatePaymentStatus(order_id, payment_status, modified_by);
+
+        return res.status(200).json({
+            success: true,
+            message: "Payment status updated successfully",
+            data
+        });
+    } catch (err) {
+        console.error("UPDATE PAYMENT STATUS ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// VERIFY RAZORPAY PAYMENT
+// =====================================
+exports.verifyOrderPayment = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+
+        const {
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature
+        } = req.body;
+
+        const modified_by = req.user?.id || req.body.modified_by || null;
+
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+            return res.status(400).json({
+                success: false,
+                message: "razorpay_order_id, razorpay_payment_id and razorpay_signature are required"
+            });
+        }
+
+        const data = await orderService.verifyOrderPayment({
+            order_id,
+            razorpay_order_id,
+            razorpay_payment_id,
+            razorpay_signature,
+            modified_by
         });
 
+        return res.status(200).json({
+            success: true,
+            message: "Payment verified successfully",
+            data
+        });
     } catch (err) {
-        res.status(500).json({
+        console.error("VERIFY ORDER PAYMENT ERROR:", err);
+        return res.status(500).json({
             success: false,
-            error: err.message
+            message: err.message || "Internal Server Error"
+        });
+    }
+};
+
+// =====================================
+// CANCEL ORDER
+// =====================================
+exports.cancelOrder = async (req, res) => {
+    try {
+        const { order_id } = req.params;
+        const modified_by = req.user?.id || req.body.modified_by || null;
+
+        const data = await orderService.cancelOrder(order_id, modified_by);
+
+        return res.status(200).json({
+            success: true,
+            message: "Order cancelled successfully",
+            data
+        });
+    } catch (err) {
+        console.error("CANCEL ORDER ERROR:", err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || "Internal Server Error"
         });
     }
 };

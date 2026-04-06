@@ -37,8 +37,6 @@ const emailService = async ({ to, bccAddress, ccAddress, subject, messageBody, b
 
 const sentEmailOutlook = async ({ to, bccAddress, ccAddress, emailSubject, messageBody, htmlBody }) => {
     try {
-        console.log('hi sarfraj,  i am here');
-
         const transporter = nodemailer.createTransport({
             host: "smtp.office365.com",
             port: 587,
@@ -53,7 +51,6 @@ const sentEmailOutlook = async ({ to, bccAddress, ccAddress, emailSubject, messa
             }
         });
 
-        console.log('transporte create successfully');
 
         const mailOptions = {
             from: `Sarfraj khan <sarfraj.ajmer@outlook.com>`,
@@ -65,10 +62,8 @@ const sentEmailOutlook = async ({ to, bccAddress, ccAddress, emailSubject, messa
             html: htmlBody,
         };
 
-        console.log('after this log sendMail method callled by transporter');
 
         const response = await transporter.sendMail(mailOptions);
-        console.log('outLook-response :', response);
         return response;
 
     } catch (error) {

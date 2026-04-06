@@ -75,7 +75,6 @@ exports.handleWebhook = async (req, res) => {
 
         const event = req.body;
 
-        console.log("Webhook Event:", event.event);
 
         // 🎯 ONLY handle successful payments
         if (event.event === "payment.captured") {
@@ -114,7 +113,6 @@ exports.handleWebhook = async (req, res) => {
                 [order_id]
             );
 
-            console.log("✅ Payment saved & order confirmed");
         }
 
         res.json({ status: "ok" });

@@ -10,6 +10,9 @@ const wallet = require('../api/v1/modules/wallet');
 const auth = require('../api/v1/modules/auth');
 const productRoutes = require('../api/v1/modules/product/index');
 const global = require('../api/v1/modules/global')
+const cart = require('../api/v1/modules/cart')
+const wishlist = require('../api/v1/modules/wishlist')
+const address = require('../api/v1/modules/address')
 
 
 router.use('/requirement', requirement)
@@ -21,6 +24,9 @@ router.use('/requirement', requirement)
     .use('/auth', auth)
     .use("/product", productRoutes)
     .use('/global', global)
+    .use('/cart', cart)
+    .use('/wishlist', wishlist)
+    .use('/address', address)
 
 
 module.exports = router;

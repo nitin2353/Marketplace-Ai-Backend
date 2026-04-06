@@ -2,7 +2,6 @@ const Response = require("../response");
 
 
 const uploadImages = async (req, res) => {
-    console.log("done")
     try {
         res.json({
             message: "Upload successful",

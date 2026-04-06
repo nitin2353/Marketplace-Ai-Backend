@@ -10,8 +10,64 @@ const handleGetProducts = async (req, res) => {
     try {
         const role = req.user.role;
         const id = req.user.id
-        
+
         const records = await productModel.getAllProducts(role, id);
+        return Response.success(res, "Records fetched successfully", records);
+    } catch (error) {
+        return Response.serverError(res, error.message || "Internal Server Error");
+    }
+}
+
+const handleFindByQuery = async (req, res) => {
+    try {
+        const { q = "", page = 1, limit = 10 } = req.query;
+
+        const offset = (page - 1) * limit;
+
+        const records = await productModel.handleFindByQueryModel({
+            q,
+            limit,
+            offset,
+        });
+
+        return Response.success(res, "Records fetched successfully", records);
+
+    } catch (error) {
+        console.error("SEARCH ERROR:", error);
+
+        return Response.serverError(res, error.message || "Internal Server Error");
+    }
+};
+
+
+const handleFindListByQuery = async (req, res) => {
+    try {
+        const { q = "", page = 1, limit = 10 } = req.query;
+
+        const offset = (page - 1) * limit;
+
+        const records = await productModel.handleFindListByQueryModel({
+            q,
+            limit,
+            offset,
+        });
+
+        return Response.success(res, "Records fetched successfully", records);
+
+    } catch (error) {
+        console.error("SEARCH ERROR:", error);
+
+        return Response.serverError(res, error.message || "Internal Server Error");
+    }
+};
+
+
+
+const handleGetProductById = async (req, res) => {
+    try {
+        const id = req.params.id
+
+        const records = await productModel.getProductById(id);
         return Response.success(res, "Records fetched successfully", records);
     } catch (error) {
         return Response.serverError(res, error.message || "Internal Server Error");
@@ -20,42 +76,33 @@ const handleGetProducts = async (req, res) => {
 
 
 
+
 const createProduct = async (req, res) => {
     try {
         const data = req.body;
-
         const userId = req.user?.id;
 
         if (!userId) {
             return Response.notFound(res, "Seller not authenticated");
         }
 
-
         if (!req.files || req.files.length === 0) {
             return Response.badRequest(res, "At least one image is required");
         }
 
+        // 🔹 Upload Images
         const uploadResults = await UTILS.uploadMultiple(req.files);
         const imageUrls = uploadResults.map(file => file.url);
 
+        data.imageUrls = imageUrls;
+        data.userId = userId;
 
-
-        data.created_by = userId;
-        data.modified_by = userId;
-        data.imageUrls = imageUrls || []
-        data.userId = userId
         const product = await productModel.createProduct(data);
-
-        if (!product || !product.id) {
-            throw new Error("Product creation failed");
-        }
-
 
         return Response.created(res, "Product created successfully", product);
 
     } catch (error) {
         console.error("CREATE PRODUCT ERROR:", error);
-
         return Response.serverError(res, "Internal server error");
     }
 };
@@ -102,7 +149,6 @@ const createProduct = async (req, res) => {
 
 // ✅ safe parse helper
 const safeParse = (data) => {
-    console.log("datadata", data)
     try {
         return data.length ? JSON.parse(data) : [];
     } catch {
@@ -204,7 +250,10 @@ const handleDeleteProduct = async (req, res) => {
 
 module.exports = {
     handleGetProducts,
+    handleFindByQuery,
+    handleGetProductById,
     createProduct,
     updateProduct,
-    handleDeleteProduct
+    handleDeleteProduct,
+    handleFindListByQuery
 };

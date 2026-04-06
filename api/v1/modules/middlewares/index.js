@@ -3,7 +3,6 @@ const jwt = require("jsonwebtoken");
 module.exports = (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-
         if (!authHeader) {
             return res.status(401).json({ error: "No token provided" });
         }
@@ -18,7 +17,7 @@ module.exports = (req, res, next) => {
 
         // ✅ Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
-
+        // req.body.user_id = decoded.id;
         // ✅ Attach full user
         req.user = decoded;
 
