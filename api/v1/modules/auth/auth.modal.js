@@ -34,6 +34,51 @@ const findUserByEmail = async (email) => {
     return result.rows[0];
 };
 
+const findUserById = async (id) => {
+    const result = await pool.query(
+        "SELECT * FROM users WHERE id = $1",
+        [id]
+    );
+    return result.rows[0];
+};
+
+const findAllUsers = async () => {
+    const result = await pool.query(
+        "SELECT id, name, email, phone, gender, role, first_name, last_name FROM users ORDER BY id"
+    );
+    return result.rows;
+};
+
+const updateUser = async (id, data) => {
+    const result = await pool.query(
+        `UPDATE users SET
+          name = COALESCE(NULLIF($1, ''), name),
+          first_name = COALESCE(NULLIF($2, ''), first_name),
+          last_name = COALESCE(NULLIF($3, ''), last_name),
+          email = COALESCE(NULLIF($4, ''), email),
+          phone = COALESCE(NULLIF($5, ''), phone),
+          gender = COALESCE(NULLIF($6, ''), gender)
+        WHERE id = $7
+        RETURNING id, name, email, phone, gender, role, first_name, last_name`,
+        [
+            data.name,
+            data.first_name,
+            data.last_name,
+            data.email,
+            data.phone,
+            data.gender,
+            id
+        ]
+    );
+    return result.rows[0];
+};
+
+const deleteUser = async (id) => {
+    await pool.query(
+        "DELETE FROM users WHERE id = $1",
+        [id]
+    );
+};
 
 const createUser = async (data) => {
     const {
@@ -109,6 +154,10 @@ const createSeller = async (data, user_id) => {
 module.exports = {
     createCustomer,
     findUserByEmail,
+    findUserById,
+    findAllUsers,
+    updateUser,
+    deleteUser,
     createUser,
     createSeller
 };
