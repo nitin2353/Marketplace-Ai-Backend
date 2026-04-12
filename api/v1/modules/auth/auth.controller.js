@@ -71,7 +71,7 @@ exports.login = async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, role: user.role, email: user.email, fullName: user.first_name, lastName: user.last_name, phone: user.phone, gender: user.gender },
+            { id: user.id, role: user.role, email: user.email, firstName: user.first_name, lastName: user.last_name, phone: user.phone, password: user.password, gender: user.gender },
             process.env.JWT_SECRET_KEY,
             { expiresIn: "5h" }
         );
@@ -123,11 +123,49 @@ exports.updateUser = async (req, res) => {
         const { id } = req.params;
         const existingUser = await authModel.findUserById(id);
         if (!existingUser) return Response.notFound(res, "User not found");
-
         const updatedUser = await authModel.updateUser(id, req.body);
         return Response.success(res, "User updated successfully", { user: updatedUser });
     } catch (err) {
         return Response.serverError(res);
+    }
+};
+
+
+exports.updatePassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { current_password, new_password } = req.body;
+
+        if (!current_password || !new_password) {
+            return Response.badRequest(res, "Current password and new password are required");
+        }
+
+        const existingUser = await authModel.findUserById(id);
+
+        if (!existingUser) {
+            return Response.notFound(res, "User not found");
+        }
+
+        
+        const isMatch = await bcrypt.compare(current_password, existingUser.password);
+
+        if (!isMatch) {
+            return Response.badRequest(res, "Current password does not match");
+        }
+
+        // new password hash karo
+        const hashedPassword = await bcrypt.hash(new_password, 10);
+
+        // password update karo
+        const updatedUser = await authModel.updatePassword(id, hashedPassword);
+
+        return Response.success(res, "Password updated successfully", {
+            user: updatedUser
+        });
+
+    } catch (err) {
+        console.error("UPDATE PASSWORD ERROR:", err);
+        return Response.serverError(res, err.message || "Internal Server Error");
     }
 };
 
