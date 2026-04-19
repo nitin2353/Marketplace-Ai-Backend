@@ -1,4 +1,5 @@
 const pool = require('../../../../config/database');
+const { normalizeProductRecords, normalizeProductRecord } = require("../../../../utils/global");
 
 
 
@@ -11,18 +12,19 @@ const getAllProducts = async (role = "customer", id = "") => {
         if (role === "seller") {
             query = `
                 SELECT 
-                p.*,
-                COALESCE(
-                json_agg(
-                json_build_object(
-                    'id', v.id,
-                    'color', v.color,
-                    'size', v.size,
-                    'price', v.final_price,
-                    'stock', v.stock
-                )
-                ) FILTER (WHERE v.id IS NOT NULL), '[]'
-                ) AS variants
+                    p.*,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'id', v.id,
+                                'color', v.color,
+                                'size', v.size,
+                                'price', v.final_price,
+                                'stock', v.stock
+                            )
+                        ) FILTER (WHERE v.id IS NOT NULL),
+                        '[]'
+                    ) AS variants
                 FROM products p
                 LEFT JOIN product_variants v ON v.product_id = p.id
                 WHERE p.seller_id = $1
@@ -33,18 +35,19 @@ const getAllProducts = async (role = "customer", id = "") => {
         } else {
             query = `
                 SELECT 
-                p.*,
-                COALESCE(
-                json_agg(
-                json_build_object(
-                    'id', v.id,
-                    'color', v.color,
-                    'size', v.size,
-                    'price', v.final_price,
-                    'stock', v.stock
-                )
-                ) FILTER (WHERE v.id IS NOT NULL), '[]'
-                ) AS variants
+                    p.*,
+                    COALESCE(
+                        json_agg(
+                            json_build_object(
+                                'id', v.id,
+                                'color', v.color,
+                                'size', v.size,
+                                'price', v.final_price,
+                                'stock', v.stock
+                            )
+                        ) FILTER (WHERE v.id IS NOT NULL),
+                        '[]'
+                    ) AS variants
                 FROM products p
                 LEFT JOIN product_variants v ON v.product_id = p.id
                 WHERE p.status = true
@@ -54,30 +57,32 @@ const getAllProducts = async (role = "customer", id = "") => {
         }
 
         const records = await pool.query(query, values);
-        return records.rows;
+        return normalizeProductRecords(records.rows);
 
     } catch (error) {
         console.error("Error fetching products:", error.message);
         throw error;
     }
 };
+// path apne project structure ke hisab se adjust kar lena
 
 const getProductById = async (id) => {
     try {
         const query = `
             SELECT 
-            p.*,
-            COALESCE(
-            json_agg(
-            json_build_object(
-                'id', v.id,
-                'color', v.color,
-                'size', v.size,
-                'price', v.final_price,
-                'stock', v.stock
-            )
-            ) FILTER (WHERE v.id IS NOT NULL), '[]'
-            ) AS variants
+                p.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', v.id,
+                            'color', v.color,
+                            'size', v.size,
+                            'price', v.final_price,
+                            'stock', v.stock
+                        )
+                    ) FILTER (WHERE v.id IS NOT NULL),
+                    '[]'
+                ) AS variants
             FROM products p
             LEFT JOIN product_variants v ON v.product_id = p.id
             WHERE p.id = $1
@@ -85,14 +90,13 @@ const getProductById = async (id) => {
         `;
 
         const records = await pool.query(query, [id]);
-        return records.rows[0];
+        return normalizeProductRecord(records.rows[0]);
 
     } catch (error) {
         console.error("Error fetching product:", error.message);
         throw error;
     }
 };
-
 
 
 
@@ -140,7 +144,6 @@ const createProductImages = async (productId, imageUrls, userId) => {
 };
 
 const createProduct = async (data) => {
-
     try {
         const productQuery = `
             INSERT INTO products (

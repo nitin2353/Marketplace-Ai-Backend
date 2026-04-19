@@ -1,6 +1,5 @@
 const pool = require('../../../../config/database');
 
-// ✅ GET ALL CART ITEMS
 const getAllCart = async (user_id) => {
     try {
         const result = await pool.query(
@@ -82,7 +81,7 @@ const updateCart = async (quantity, cartId, userId) => {
              WHERE id = $3 AND user_id = $4
              RETURNING *`,
             [
-                quantity, 
+                quantity,
                 userId,
                 cartId,
                 userId

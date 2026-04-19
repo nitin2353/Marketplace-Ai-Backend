@@ -12,6 +12,7 @@ const handleGetProducts = async (req, res) => {
         const id = req.user.id
 
         const records = await productModel.getAllProducts(role, id);
+        console.log("recordsrecords", records)
         return Response.success(res, "Records fetched successfully", records);
     } catch (error) {
         return Response.serverError(res, error.message || "Internal Server Error");
@@ -81,22 +82,21 @@ const createProduct = async (req, res) => {
     try {
         const data = req.body;
         const userId = req.user?.id;
-
+        
         if (!userId) {
             return Response.notFound(res, "Seller not authenticated");
         }
-
+        
         if (!req.files || req.files.length === 0) {
             return Response.badRequest(res, "At least one image is required");
         }
-
         // 🔹 Upload Images
         const uploadResults = await UTILS.uploadMultiple(req.files);
         const imageUrls = uploadResults.map(file => file.url);
-
+        
         data.imageUrls = imageUrls;
         data.userId = userId;
-
+        
         const product = await productModel.createProduct(data);
 
         return Response.created(res, "Product created successfully", product);

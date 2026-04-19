@@ -1,4 +1,5 @@
 const orderService = require("./order.modal");
+const Response = require('../response');
 
 // =====================================
 // CREATE ORDER
@@ -298,7 +299,7 @@ exports.getOrderUserSnapshot = async (req, res) => {
 exports.updateOrderStatus = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const { order_status } = req.body;
+        const { status } = req.body;
 
         const modified_by = req.user?.id || req.body.modified_by || null;
 
@@ -312,27 +313,23 @@ exports.updateOrderStatus = async (req, res) => {
             "payment_failed"
         ];
 
-        if (!order_status) {
+        if (!status) {
             return res.status(400).json({
                 success: false,
-                message: "order_status is required"
+                message: "status is required"
             });
         }
 
-        if (!allowedStatuses.includes(order_status)) {
+        if (!allowedStatuses.includes(status)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid order status"
             });
         }
 
-        const data = await orderService.updateOrderStatus(order_id, order_status, modified_by);
+        const data = await orderService.updateOrderStatus(order_id, status, modified_by);
 
-        return res.status(200).json({
-            success: true,
-            message: "Order status updated successfully",
-            data
-        });
+        return Response.success(res, "Order status updated successfully", data);
     } catch (err) {
         console.error("UPDATE ORDER STATUS ERROR:", err);
         return res.status(500).json({
@@ -348,27 +345,27 @@ exports.updateOrderStatus = async (req, res) => {
 exports.updatePaymentStatus = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const { payment_status } = req.body;
-
+        const { paymentStatus } = req.body;
+        
         const modified_by = req.user?.id || req.body.modified_by || null;
 
         const allowedPaymentStatuses = ["pending", "paid", "failed", "refunded", "cancelled"];
 
-        if (!payment_status) {
+        if (!paymentStatus) {
             return res.status(400).json({
                 success: false,
-                message: "payment_status is required"
+                message: "payment status is required"
             });
         }
 
-        if (!allowedPaymentStatuses.includes(payment_status)) {
+        if (!allowedPaymentStatuses.includes(paymentStatus)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid payment status"
             });
         }
 
-        const data = await orderService.updatePaymentStatus(order_id, payment_status, modified_by);
+        const data = await orderService.updatePaymentStatus(order_id, paymentStatus, modified_by);
 
         return res.status(200).json({
             success: true,

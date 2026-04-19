@@ -63,8 +63,74 @@ const removeMultiple = async (urls = []) => {
 };
 
 
+const normalizeProductImages = (imageUrl) => {
+    let parsedImages = [];
+
+    if (Array.isArray(imageUrl)) {
+        parsedImages = imageUrl.filter(Boolean);
+    }
+    else if (typeof imageUrl === "string" && imageUrl.trim()) {
+        const raw = imageUrl.trim();
+
+        // PostgreSQL array format: {"url1","url2"}
+        if (raw.startsWith("{") && raw.endsWith("}")) {
+            const matches = [...raw.matchAll(/"(.*?)"/g)];
+            parsedImages = matches.map(m => m[1]).filter(Boolean);
+
+            // fallback
+            if (!parsedImages.length) {
+                parsedImages = raw
+                    .slice(1, -1)
+                    .split(",")
+                    .map(item => item.replace(/^"+|"+$/g, "").trim())
+                    .filter(Boolean);
+            }
+        }
+        // JSON array string
+        else if (raw.startsWith("[") && raw.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(raw);
+                parsedImages = Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+            } catch (error) {
+                parsedImages = [];
+            }
+        }
+        // single URL
+        else {
+            parsedImages = [raw];
+        }
+    }
+
+    return parsedImages;
+};
+
+const normalizeProductRecord = (product) => {
+    if (!product) return null;
+
+    const parsedImages = normalizeProductImages(product.image_url);
+
+    return {
+        ...product,
+        image_url: parsedImages,
+        images: parsedImages,
+        img: parsedImages[0] || null,
+    };
+};
+
+const normalizeProductRecords = (products = []) => {
+    if (!Array.isArray(products)) return [];
+    return products.map(normalizeProductRecord);
+};
+
+
+
+
+
 module.exports = {
     uploadFromBuffer,
     uploadMultiple,
-    removeMultiple
+    removeMultiple,
+    normalizeProductImages,
+    normalizeProductRecord,
+    normalizeProductRecords,
 };

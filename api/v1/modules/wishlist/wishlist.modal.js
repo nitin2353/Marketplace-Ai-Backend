@@ -1,4 +1,6 @@
 const pool = require('../../../../config/database');
+const { normalizeProductRecords } = require('../../../../utils/global');
+
 
 
 const getAllWishlist = async (user_id) => {
@@ -55,7 +57,7 @@ const getAllWishlist = async (user_id) => {
 
         const result = await pool.query(query, [user_id]);
 
-        return result.rows;
+        return normalizeProductRecords(result.rows);
     } catch (error) {
         console.error("GET WISHLIST ERROR:", error.message);
         throw error;

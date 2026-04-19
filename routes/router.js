@@ -13,6 +13,8 @@ const global = require('../api/v1/modules/global')
 const cart = require('../api/v1/modules/cart')
 const wishlist = require('../api/v1/modules/wishlist')
 const address = require('../api/v1/modules/address')
+const report = require('../api/v1/modules/report')
+
 
 
 router.use('/requirement', requirement)
@@ -27,6 +29,7 @@ router.use('/requirement', requirement)
     .use('/cart', cart)
     .use('/wishlist', wishlist)
     .use('/address', address)
+    .use('/report', report)
 
 
 module.exports = router;
