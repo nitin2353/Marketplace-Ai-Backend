@@ -461,16 +461,17 @@ exports.getCustomerOrderById = async (user_id, order_id) => {
 exports.getSellerOrders = async (seller_id) => {
     const res = await pool.query(
         `
-        SELECT DISTINCT 
-            o.*
-        FROM public.orders o
-        INNER JOIN public.order_items oi
-            ON oi.order_id = o.id
-        INNER JOIN public.products p
-            ON p.id = oi.product_id
-        WHERE p.seller_id = $1
-        ORDER BY o.created_time DESC
-        `,
+    SELECT DISTINCT 
+        o.*,
+        oi.product_id   -- ✅ ye add kar diya
+    FROM public.orders o
+    INNER JOIN public.order_items oi
+        ON oi.order_id = o.id
+    INNER JOIN public.products p
+        ON p.id = oi.product_id
+    WHERE p.seller_id = $1
+    ORDER BY o.created_time DESC
+    `,
         [seller_id]
     );
 
