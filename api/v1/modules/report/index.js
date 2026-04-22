@@ -18,7 +18,11 @@ router.get('/order-status-mix/:sellerId', authMiddleware, reportController.getOr
 // Recent orders for a product
 router.get('/recent-orders/:productId', authMiddleware, reportController.getRecentOrdersByProduct);
 
+router.get('/recent-orders', authMiddleware, reportController.getRecentOrdersByProduct);
+
 // Rating breakdown for a product
 router.get('/rating-breakdown/:productId', authMiddleware, reportController.getRatingBreakdown);
+
+router.get("/recent-activities", authMiddleware, reportController.getRecentActivities);
 
 module.exports = router;

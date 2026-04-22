@@ -68,12 +68,10 @@ exports.getOrderStatusMix = async (req, res) => {
 exports.getRecentOrdersByProduct = async (req, res) => {
     try {
         const { productId } = req.params;
+        const userId = req.user.id
 
-        if (!productId) {
-            return Response.badRequest(res, "Product ID is required");
-        }
+        const data = await reportService.getRecentOrdersByProduct(productId, userId);
 
-        const data = await reportService.getRecentOrdersByProduct(productId);
         return Response.success(res, "Recent orders fetched successfully", data);
     } catch (error) {
         console.error("getRecentOrdersByProduct error:", error);
@@ -93,6 +91,19 @@ exports.getRatingBreakdown = async (req, res) => {
         return Response.success(res, "Rating breakdown fetched successfully", data);
     } catch (error) {
         console.error("getRatingBreakdown error:", error);
+        return Response.serverError(res, error.message || "Internal Server Error");
+    }
+};
+
+exports.getRecentActivities = async (req, res) => {
+    try {
+        const sellerId = req.user.id;
+
+        const data = await reportService.getRecentActivities(sellerId);
+
+        return Response.success(res, "Recent activities fetched successfully", data);
+    } catch (error) {
+        console.error("getRecentActivities error:", error);
         return Response.serverError(res, error.message || "Internal Server Error");
     }
 };

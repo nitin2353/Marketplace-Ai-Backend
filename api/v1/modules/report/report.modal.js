@@ -137,38 +137,73 @@ exports.getOrderStatusMix = async (sellerId) => {
   }));
 };
 
-exports.getRecentOrdersByProduct = async (productId) => {
-  const query = `
-    SELECT
-      o.id,
-      o.order_number,
-      o.total_amount,
-      o.order_status,
-      o.created_time,
-      oi.quantity,
-      oi.line_total AS amount,
-      ous.full_name AS buyer,
-      oas.city
-    FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    LEFT JOIN order_user_snapshot ous ON ous.order_id = o.id
-    LEFT JOIN order_address_snapshot oas ON oas.order_id = o.id
-    WHERE oi.product_id = $1
-    ORDER BY o.created_time DESC
-    LIMIT 12;
-  `;
+exports.getRecentOrdersByProduct = async (productId, userId) => {
+  try {
+    let query = `
+      SELECT
+          o.id,
+          o.order_number,
+          o.total_amount,
+          o.order_status,
+          o.created_time,
+          oi.quantity,
+          p.seller_id AS userId,
+          oi.line_total AS amount,
+          ous.full_name AS buyer,
+          oas.city
+      FROM order_items oi
+      JOIN orders o 
+          ON o.id = oi.order_id
+      JOIN products p 
+          ON p.id = oi.product_id
+      LEFT JOIN order_user_snapshot ous 
+          ON ous.order_id = o.id
+      LEFT JOIN order_address_snapshot oas 
+          ON oas.order_id = o.id
+    `;
 
-  const result = await pool.query(query, [productId]);
+    const values = [];
+    let index = 1;
+    const conditions = [];
 
-  return result.rows.map((row) => ({
-    id: row.order_number || row.id,
-    buyer: row.buyer || 'Unknown Buyer',
-    qty: Number(row.quantity),
-    amount: Number(row.amount || 0),
-    status: row.order_status,
-    date: row.created_time,
-    city: row.city || 'N/A',
-  }));
+    // ✅ product filter
+    if (productId) {
+      conditions.push(`oi.product_id = $${index++}`);
+      values.push(productId);
+    }
+
+    // ✅ seller filter (correct field)
+    if (userId) {
+      conditions.push(`p.seller_id = $${index++}`);
+      values.push(userId);
+    }
+
+    // ✅ apply WHERE only once
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    query += `
+      ORDER BY o.created_time DESC
+      LIMIT 12
+    `;
+
+    const result = await pool.query(query, values);
+
+    return result.rows.map((row) => ({
+      id: row.order_number || row.id,
+      buyer: row.buyer || "Unknown Buyer",
+      qty: Number(row.quantity || 0),
+      amount: Number(row.amount || 0),
+      status: row.order_status,
+      date: row.created_time,
+      city: row.city || "N/A",
+    }));
+
+  } catch (error) {
+    console.error("getRecentOrdersByProduct model error:", error);
+    throw error;
+  }
 };
 
 exports.getRatingBreakdown = async (productId) => {
@@ -209,9 +244,139 @@ exports.getRatingBreakdown = async (productId) => {
     pct: totalReviews > 0 ? Math.round((countMap[star] / totalReviews) * 100) : 0,
   }));
 
+
+
+
   return {
     avg_rating: avgRating,
     total_reviews: totalReviews,
     breakdown,
   };
+};
+
+
+exports.getRecentActivities = async (sellerId) => {
+  try {
+    const query = `
+      SELECT *
+      FROM (
+
+        -- 1. New Order
+        SELECT
+          o.id,
+          'new_order' AS type,
+          'New order received' AS title,
+          CONCAT(o.order_number, ' · ', oi.product_title, ' · ₹', COALESCE(oi.line_total, 0)) AS sub,
+          o.created_time
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN products p ON p.id = oi.product_id
+        WHERE p.seller_id = $1
+
+        UNION ALL
+
+        -- 2. New 5-star review
+        SELECT
+          r.id,
+          'review_received' AS type,
+          'New 5-star review' AS title,
+          CONCAT(
+            COALESCE(oi.product_title, 'Product'),
+            ' · ''',
+            COALESCE(r.comment, 'Excellent quality!'),
+            ''''
+          ) AS sub,
+          r.created_at AS created_time
+        FROM reviews r
+        JOIN order_items oi ON oi.order_id = r.order_id
+        JOIN products p ON p.id = oi.product_id
+        WHERE p.seller_id = $1
+          AND r.rating = 5
+
+        UNION ALL
+
+        -- 3. Low stock
+        SELECT
+          p.id,
+          'low_stock' AS type,
+          'Low stock alert' AS title,
+          CONCAT(p.title, ' · only ', p.stock, ' left') AS sub,
+          COALESCE(p.modified_time, p.created_at) AS created_time
+        FROM products p
+        WHERE p.seller_id = $1
+          AND p.stock <= 5
+          AND COALESCE(p.status, true) = true
+
+        UNION ALL
+
+        -- 4. Return / Returned order
+        SELECT
+          o.id,
+          'return_request' AS type,
+          'Return request' AS title,
+          CONCAT(o.order_number, ' · ', oi.product_title) AS sub,
+          o.modified_time AS created_time
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN products p ON p.id = oi.product_id
+        WHERE p.seller_id = $1
+          AND o.order_status IN ('return_requested', 'returned')
+
+        UNION ALL
+
+        -- 5. Product published
+        SELECT
+          p.id,
+          'product_published' AS type,
+          'Product published' AS title,
+          CONCAT(p.title, ' · now live') AS sub,
+          p.created_at AS created_time
+        FROM products p
+        WHERE p.seller_id = $1
+          AND COALESCE(p.status, true) = true
+
+        UNION ALL
+
+        -- 6. Payment / payout processed
+        SELECT
+          pay.id,
+          'payout_processed' AS type,
+          'Payout processed' AS title,
+          CONCAT('₹', COALESCE(pay.seller_amount, pay.amount, 0), ' credited') AS sub,
+          pay.created_at AS created_time
+        FROM payments pay
+        JOIN orders o ON o.id = pay.order_id
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN products p ON p.id = oi.product_id
+        WHERE p.seller_id = $1
+          AND pay.status IN ('released', 'paid')
+
+        UNION ALL
+
+        -- 7. Product trending (derived from sold count)
+        SELECT
+          p.id,
+          'product_trending' AS type,
+          'Product trending' AS title,
+          CONCAT(
+            p.title,
+            ' · Top seller in ',
+            COALESCE(p.category, 'Category')
+          ) AS sub,
+          COALESCE(p.modified_time, p.created_at) AS created_time
+        FROM products p
+        WHERE p.seller_id = $1
+          AND COALESCE(p.sold, 0) >= 10
+
+      ) AS activities
+      ORDER BY created_time DESC
+      LIMIT 10;
+    `;
+
+    const result = await pool.query(query, [sellerId]);
+    return result.rows;
+  } catch (error) {
+    console.error("getRecentActivities model error:", error);
+    throw error;
+  }
 };

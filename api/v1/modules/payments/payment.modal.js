@@ -379,7 +379,6 @@ exports.verifyAndCreateOrder = async ({
                     modified_by
                 ]
             );
-            console.log("item", item, quantity, item.product_id)
             if (item.variant_id) {
                 await client.query(
                     `
@@ -401,7 +400,6 @@ exports.verifyAndCreateOrder = async ({
                     `,
                     [quantity, item.product_id]
                 );
-                console.log('data', data)
             }
         }
 

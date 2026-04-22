@@ -186,16 +186,16 @@ exports.getSellerOrderById = async (req, res) => {
 exports.getOrderById = async (req, res) => {
     try {
         const { order_id } = req.params;
-
-        const data = await orderService.getOrderById(order_id);
-
+        const {id, user_id} = req?.user || req.params;
+        
+        const data = await orderService.getOrderById(order_id, id);
         if (!data) {
             return res.status(404).json({
                 success: false,
                 message: "Order not found"
             });
         }
-
+        
         return res.status(200).json({
             success: true,
             message: "Order fetched successfully",

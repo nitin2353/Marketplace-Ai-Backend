@@ -542,10 +542,7 @@ exports.getSellerOrderById = async (seller_id, order_id) => {
     };
 };
 
-// =====================================
-// GET FULL ORDER BY ID
-// =====================================
-exports.getOrderById = async (order_id) => {
+exports.getOrderById = async (order_id, id) => {
     const orderRes = await pool.query(
         `
         SELECT *
@@ -589,11 +586,27 @@ exports.getOrderById = async (order_id) => {
         [order_id]
     );
 
+    const sellerDetails = await pool.query(
+        `
+        SELECT *
+        FROM public.users
+        WHERE id = $1
+        `,
+        [id]
+    );
+
+    const sellerAddress = await pool.query(
+        `SELECT * from public.address where user_id = 'f489a32d-2b11-49c2-8a3e-36505396bd32'`
+       
+    )
+    console.log("sellerAddress", sellerDetails.rows[0].id)
+
     return {
         ...order,
         items: itemsRes.rows,
         address_snapshot: addressRes.rows[0] || null,
-        user_snapshot: userRes.rows[0] || null
+        user_snapshot: userRes.rows[0] || null,
+        seller_info: {info: sellerDetails.rows[0], address: sellerAddress?.rows[0]} || null
     };
 };
 

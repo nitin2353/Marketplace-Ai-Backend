@@ -75,7 +75,6 @@ exports.login = async (req, res) => {
             process.env.JWT_SECRET_KEY,
             { expiresIn: "5h" }
         );
-
         return Response.success(res, "Login successful", { token, role: user.role });
 
     } catch (err) {
@@ -146,7 +145,7 @@ exports.updatePassword = async (req, res) => {
             return Response.notFound(res, "User not found");
         }
 
-        
+
         const isMatch = await bcrypt.compare(current_password, existingUser.password);
 
         if (!isMatch) {

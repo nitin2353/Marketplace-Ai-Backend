@@ -12,7 +12,6 @@ const handleGetProducts = async (req, res) => {
         const id = req.user.id
 
         const records = await productModel.getAllProducts(role, id);
-        console.log("recordsrecords", records)
         return Response.success(res, "Records fetched successfully", records);
     } catch (error) {
         return Response.serverError(res, error.message || "Internal Server Error");
