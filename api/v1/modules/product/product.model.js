@@ -20,7 +20,8 @@ const getAllProducts = async (role = "customer", id = "") => {
                                 'color', v.color,
                                 'size', v.size,
                                 'price', v.final_price,
-                                'stock', v.stock
+                                'stock', v.stock,
+                                'old_price', v.old_price
                             )
                         ) FILTER (WHERE v.id IS NOT NULL),
                         '[]'
@@ -43,7 +44,8 @@ const getAllProducts = async (role = "customer", id = "") => {
                                 'color', v.color,
                                 'size', v.size,
                                 'price', v.final_price,
-                                'stock', v.stock
+                                'stock', v.stock,
+                                'old_price', v.old_price
                             )
                         ) FILTER (WHERE v.id IS NOT NULL),
                         '[]'
@@ -78,7 +80,8 @@ const getProductById = async (id) => {
                             'color', v.color,
                             'size', v.size,
                             'price', v.final_price,
-                            'stock', v.stock
+                            'stock', v.stock,
+                            'old_price', v.old_price
                         )
                     ) FILTER (WHERE v.id IS NOT NULL),
                     '[]'
@@ -144,66 +147,178 @@ const createProductImages = async (productId, imageUrls, userId) => {
 };
 
 const createProduct = async (data) => {
+    const client = await pool.connect();
+
     try {
+        await client.query("BEGIN");
+
+        const parseBoolean = (value, defaultValue = false) => {
+            if (value === undefined || value === null || value === "") return defaultValue;
+            if (typeof value === "boolean") return value;
+            if (typeof value === "string") return value.toLowerCase() === "true";
+            return Boolean(value);
+        };
+
+        const parseNumber = (value, defaultValue = null) => {
+            if (value === undefined || value === null || value === "") return defaultValue;
+            const num = Number(value);
+            return Number.isNaN(num) ? defaultValue : num;
+        };
+
+        const parseJSON = (value, defaultValue = null) => {
+            if (!value) return defaultValue;
+            if (typeof value === "object") return value;
+            try {
+                return JSON.parse(value);
+            } catch {
+                return defaultValue;
+            }
+        };
+
+        const imageUrls =
+            Array.isArray(data.imageUrls)
+                ? data.imageUrls
+                : parseJSON(data.imageUrls, []);
+
+        const variants =
+            Array.isArray(data.variants)
+                ? data.variants
+                : parseJSON(data.variants, []);
+
+        const customizationFields = parseJSON(data.customization_fields, null);
+
         const productQuery = `
-            INSERT INTO products (
+            INSERT INTO public.products (
                 seller_id,
                 title,
                 description,
-                base_price,
-                is_customizable,
                 brand,
+                category,
+                tag,
+
+                base_price,
                 old_price,
                 discount,
+
+                tax_percentage,
+                tax_inclusive,
+
                 stock,
-                tag,
-                rating,
-                reviews,
-                sold,
+                min_stock_alert,
+
+                weight,
+                length,
+                width,
+                height,
+
+                delivery_days,
+                is_cod_available,
+                is_free_delivery,
+
+                image_url,
+
+                is_customizable,
+                customization_type,
+                customization_fields,
+
                 is_return,
                 is_replace,
                 return_replace_duration,
                 return_replace_instructions,
-                image_url,
-                category
+
+                slug,
+                meta_title,
+                meta_description,
+
+                sold,
+                views,
+                clicks,
+                wishlist_count,
+                cart_count,
+
+                status,
+                created_by,
+                modified_by,
+                created_at,
+                modified_time
             )
             VALUES (
-                $1,$2,$3,$4,$5,
-                $6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,
-                $16,$17,$18,$19
+                $1,  $2,  $3,  $4,  $5,  $6,
+                $7,  $8,  $9,
+                $10, $11,
+                $12, $13,
+                $14, $15, $16, $17,
+                $18, $19, $20,
+                $21,
+                $22, $23, $24,
+                $25, $26, $27, $28,
+                $29, $30, $31,
+                $32, $33, $34, $35, $36, $37, $38,
+                $39, NOW(), NOW()
             )
             RETURNING *;
         `;
 
         const productValues = [
             data.userId,
-            data.title,
-            data.description,
-            data.base_price,
-            data.is_customizable || false,
-            data.brand,
-            data.old_price || null,
-            data.discount || null,
-            data.stock || 0,
+            data.title?.trim(),
+            data.description || null,
+            data.brand || null,
+            data.category || null,
             data.tag || null,
-            data.rating || 0,
-            data.reviews || 0,
-            data.sold || 0,
-            data.is_return || false,
-            data.is_replace || false,
-            data.return_replace_duration || null,
+
+            parseNumber(data.base_price, 0),
+            parseNumber(data.old_price, null),
+            parseNumber(data.discount, 0),
+
+            parseNumber(data.tax_percentage, 0),
+            parseBoolean(data.tax_inclusive, true),
+
+            parseNumber(data.stock, 0),
+            parseNumber(data.min_stock_alert, 5),
+
+            parseNumber(data.weight, null),
+            parseNumber(data.length, null),
+            parseNumber(data.width, null),
+            parseNumber(data.height, null),
+
+            parseNumber(data.delivery_days, null),
+            parseBoolean(data.is_cod_available, true),
+            parseBoolean(data.is_free_delivery, false),
+
+            imageUrls,
+
+            parseBoolean(data.is_customizable, false),
+            data.customization_type || null,
+            customizationFields,
+
+            parseBoolean(data.is_return, false),
+            parseBoolean(data.is_replace, false),
+            parseNumber(data.return_replace_duration, null),
             data.return_replace_instructions || null,
-            data.imageUrls || [],
-            data.category || null
+
+            data.slug || null,
+            data.meta_title || null,
+            data.meta_description || null,
+
+            parseNumber(data.sold, 0),
+            parseNumber(data.views, 0),
+            parseNumber(data.clicks, 0),
+            parseNumber(data.wishlist_count, 0),
+            parseNumber(data.cart_count, 0),
+
+            data.status || "draft",
+            data.userId || null,
+            data.userId || null
         ];
 
-        const productRes = await pool.query(productQuery, productValues);
-        const product = productRes.rows[0];
-        if (data.variants && data.variants.length > 0) {
 
+        const productRes = await client.query(productQuery, productValues);
+        const product = productRes.rows[0];
+
+        if (variants.length > 0) {
             const variantQuery = `
-                INSERT INTO product_variants (
+                INSERT INTO public.product_variants (
                     color,
                     size,
                     final_price,
@@ -215,37 +330,43 @@ const createProduct = async (data) => {
                     created_time,
                     modified_time
                 )
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW(),NOW())
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+                RETURNING *;
             `;
 
-            const queries = JSON.parse(data.variants).map((v) => {
+            for (const v of variants) {
                 const variantValues = [
                     v.color || null,
                     v.size || null,
-                    v.price || data.base_price,
-                    v.stock || 0,
+                    parseNumber(v.final_price ?? v.price, parseNumber(data.base_price, 0)),
+                    parseNumber(v.stock, 0),
                     product.id,
-                    v.old_price || data.old_price,
-                    data.userId,
-                    data.userId
+                    parseNumber(v.old_price, parseNumber(data.old_price, null)),
+                    data.userId || null,
+                    data.userId || null
                 ];
 
-                return pool.query(variantQuery, variantValues);
-            });
-
-            await Promise.all(queries);
+                await client.query(variantQuery, variantValues);
+            }
         }
 
+        await client.query("COMMIT");
         return product;
-
     } catch (error) {
+        await client.query("ROLLBACK");
         console.error("MODEL CREATE PRODUCT ERROR:", error.message);
         throw error;
+    } finally {
+        client.release();
     }
 };
 
 const modelHandleUpdateProduct = async (data) => {
+    const client = await pool.connect();
+
     try {
+        await client.query("BEGIN");
+
         const query = `
             UPDATE public.products SET
                 title = $1,
@@ -256,18 +377,32 @@ const modelHandleUpdateProduct = async (data) => {
                 old_price = $6,
                 discount = $7,
                 tag = $8,
-                rating = $9,
-                reviews = $10,
-                sold = $11,
-                stock = $12,
-                color = $13,
-                is_return = $14,
-                is_replace = $15,
-                return_replace_duration = $16,
-                return_replace_instructions = $17,
-                image_url = $18,
-                modified_by = $19
-            WHERE id = $20
+                stock = $9,
+                min_stock_alert = $10,
+                tax_percentage = $11,
+                tax_inclusive = $12,
+                weight = $13,
+                length = $14,
+                width = $15,
+                height = $16,
+                delivery_days = $17,
+                is_cod_available = $18,
+                is_free_delivery = $19,
+                is_return = $20,
+                is_replace = $21,
+                return_replace_duration = $22,
+                return_replace_instructions = $23,
+                image_url = $24,
+                customization_type = $25,
+                customization_fields = $26,
+                slug = $27,
+                meta_title = $28,
+                meta_description = $29,
+                status = $30,
+                category = $31,
+                modified_by = $32,
+                modified_time = NOW()
+            WHERE id = $33
             RETURNING *;
         `;
 
@@ -278,29 +413,96 @@ const modelHandleUpdateProduct = async (data) => {
             data.is_customizable || false,
             data.brand,
             data.old_price || null,
-            data.discount || null,
+            data.discount || 0,
             data.tag || null,
-            data.rating || 0,
-            data.reviews || 0,
-            data.sold || 0,
-            data.stock,
-            data.color || null,
+            data.stock || 0,
+            data.min_stock_alert || 5,
+            data.tax_percentage || 0,
+            data.tax_inclusive ?? true,
+            data.weight || null,
+            data.length || null,
+            data.width || null,
+            data.height || null,
+            data.delivery_days || null,
+            data.is_cod_available ?? true,
+            data.is_free_delivery ?? false,
             data.is_return || false,
             data.is_replace || false,
             data.return_replace_duration || null,
             data.return_replace_instructions || null,
             data.image_url || [],
+            data.customization_type || null,
+            data.customization_fields || null,
+            data.slug || null,
+            data.meta_title || null,
+            data.meta_description || null,
+            data.status || "draft",
+            data.category || null,
             data.modified_by,
             data.id
         ];
 
-        const result = await pool.query(query, values);
+        const result = await client.query(query, values);
+        const product = result.rows[0];
 
-        return result.rows[0];
+        if (!product) {
+            await client.query("ROLLBACK");
+            return null;
+        }
+
+        const variants = Array.isArray(data.variants) ? data.variants : [];
+
+        // Simple and safe strategy: delete old variants, insert fresh variants
+        await client.query(
+            `DELETE FROM public.product_variants WHERE product_id = $1`,
+            [data.id]
+        );
+
+        if (variants.length > 0) {
+            const variantQuery = `
+                INSERT INTO public.product_variants (
+                    color,
+                    size,
+                    final_price,
+                    stock,
+                    created_by,
+                    modified_by,
+                    created_time,
+                    modified_time,
+                    product_id,
+                    old_price
+                )
+                VALUES ($1,$2,$3,$4,$5,$6,NOW(),NOW(),$7,$8)
+                RETURNING *;
+            `;
+
+            for (const v of variants) {
+                await client.query(variantQuery, [
+                    v.color || null,
+                    v.size || null,
+                    Number(v.final_price ?? v.price ?? data.base_price ?? 0),
+                    Number(v.stock ?? 0),
+                    data.modified_by,
+                    data.modified_by,
+                    data.id,
+                    v.old_price ? Number(v.old_price) : null
+                ]);
+            }
+        }
+
+        await client.query("COMMIT");
+
+        return {
+            ...product,
+            variants
+        };
 
     } catch (error) {
+        await client.query("ROLLBACK");
         console.error("UPDATE PRODUCT ERROR:", error);
         throw error;
+    } finally {
+        client.release();
     }
 };
 

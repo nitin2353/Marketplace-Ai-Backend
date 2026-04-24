@@ -1,5 +1,5 @@
 const express = require('express');
-const   router = express.Router();
+const router = express.Router();
 
 const requirement = require('../api/v1/modules/requirement');
 const quote = require('../api/v1/modules/quote');
@@ -14,6 +14,7 @@ const cart = require('../api/v1/modules/cart')
 const wishlist = require('../api/v1/modules/wishlist')
 const address = require('../api/v1/modules/address')
 const report = require('../api/v1/modules/report')
+const notification = require("../api/v1/modules/notifications");
 
 
 
@@ -30,6 +31,7 @@ router.use('/requirement', requirement)
     .use('/wishlist', wishlist)
     .use('/address', address)
     .use('/report', report)
+    .use("/notification", notification);
 
 
 module.exports = router;

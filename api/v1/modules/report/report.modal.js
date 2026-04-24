@@ -266,12 +266,19 @@ exports.getRecentActivities = async (sellerId) => {
           o.id,
           'new_order' AS type,
           'New order received' AS title,
-          CONCAT(o.order_number, ' · ', oi.product_title, ' · ₹', COALESCE(oi.line_total, 0)) AS sub,
+          CONCAT(
+            o.order_number,
+            ' · ',
+            COALESCE(MIN(oi.product_title), 'Product'),
+            ' · ₹',
+            COALESCE(SUM(oi.line_total), 0)
+          ) AS sub,
           o.created_time
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        JOIN products p ON p.id = oi.product_id
+        FROM public.order_items oi
+        JOIN public.orders o ON o.id = oi.order_id
+        JOIN public.products p ON p.id = oi.product_id
         WHERE p.seller_id = $1
+        GROUP BY o.id, o.order_number, o.created_time
 
         UNION ALL
 
@@ -281,17 +288,18 @@ exports.getRecentActivities = async (sellerId) => {
           'review_received' AS type,
           'New 5-star review' AS title,
           CONCAT(
-            COALESCE(oi.product_title, 'Product'),
+            COALESCE(MIN(oi.product_title), 'Product'),
             ' · ''',
             COALESCE(r.comment, 'Excellent quality!'),
             ''''
           ) AS sub,
           r.created_at AS created_time
-        FROM reviews r
-        JOIN order_items oi ON oi.order_id = r.order_id
-        JOIN products p ON p.id = oi.product_id
+        FROM public.reviews r
+        JOIN public.order_items oi ON oi.order_id = r.order_id
+        JOIN public.products p ON p.id = oi.product_id
         WHERE p.seller_id = $1
           AND r.rating = 5
+        GROUP BY r.id, r.comment, r.created_at
 
         UNION ALL
 
@@ -300,12 +308,12 @@ exports.getRecentActivities = async (sellerId) => {
           p.id,
           'low_stock' AS type,
           'Low stock alert' AS title,
-          CONCAT(p.title, ' · only ', p.stock, ' left') AS sub,
+          CONCAT(p.title, ' · only ', COALESCE(p.stock, 0), ' left') AS sub,
           COALESCE(p.modified_time, p.created_at) AS created_time
-        FROM products p
+        FROM public.products p
         WHERE p.seller_id = $1
-          AND p.stock <= 5
-          AND COALESCE(p.status, true) = true
+          AND COALESCE(p.stock, 0) <= COALESCE(p.min_stock_alert, 5)
+          AND p.status IN ('active', 'draft', 'published', 'true')
 
         UNION ALL
 
@@ -314,26 +322,31 @@ exports.getRecentActivities = async (sellerId) => {
           o.id,
           'return_request' AS type,
           'Return request' AS title,
-          CONCAT(o.order_number, ' · ', oi.product_title) AS sub,
-          o.modified_time AS created_time
-        FROM order_items oi
-        JOIN orders o ON o.id = oi.order_id
-        JOIN products p ON p.id = oi.product_id
+          CONCAT(
+            o.order_number,
+            ' · ',
+            COALESCE(MIN(oi.product_title), 'Product')
+          ) AS sub,
+          COALESCE(o.modified_time, o.created_time) AS created_time
+        FROM public.order_items oi
+        JOIN public.orders o ON o.id = oi.order_id
+        JOIN public.products p ON p.id = oi.product_id
         WHERE p.seller_id = $1
           AND o.order_status IN ('return_requested', 'returned')
+        GROUP BY o.id, o.order_number, o.modified_time, o.created_time
 
         UNION ALL
 
-        -- 5. Product published
+        -- 5. Product published / active
         SELECT
           p.id,
           'product_published' AS type,
           'Product published' AS title,
           CONCAT(p.title, ' · now live') AS sub,
           p.created_at AS created_time
-        FROM products p
+        FROM public.products p
         WHERE p.seller_id = $1
-          AND COALESCE(p.status, true) = true
+          AND p.status IN ('active', 'published', 'true')
 
         UNION ALL
 
@@ -344,31 +357,38 @@ exports.getRecentActivities = async (sellerId) => {
           'Payout processed' AS title,
           CONCAT('₹', COALESCE(pay.seller_amount, pay.amount, 0), ' credited') AS sub,
           pay.created_at AS created_time
-        FROM payments pay
-        JOIN orders o ON o.id = pay.order_id
-        JOIN order_items oi ON oi.order_id = o.id
-        JOIN products p ON p.id = oi.product_id
+        FROM public.payments pay
+        JOIN public.orders o ON o.id = pay.order_id
+        JOIN public.order_items oi ON oi.order_id = o.id
+        JOIN public.products p ON p.id = oi.product_id
         WHERE p.seller_id = $1
           AND pay.status IN ('released', 'paid')
+        GROUP BY pay.id, pay.seller_amount, pay.amount, pay.created_at
 
         UNION ALL
 
-        -- 7. Product trending (derived from sold count)
+        -- 7. Product trending from analytics
         SELECT
           p.id,
           'product_trending' AS type,
           'Product trending' AS title,
           CONCAT(
             p.title,
-            ' · Top seller in ',
+            ' · Trending in ',
             COALESCE(p.category, 'Category')
           ) AS sub,
           COALESCE(p.modified_time, p.created_at) AS created_time
-        FROM products p
+        FROM public.products p
         WHERE p.seller_id = $1
-          AND COALESCE(p.sold, 0) >= 10
+          AND (
+            COALESCE(p.views, 0) >= 100
+            OR COALESCE(p.clicks, 0) >= 50
+            OR COALESCE(p.wishlist_count, 0) >= 10
+            OR COALESCE(p.cart_count, 0) >= 10
+          )
 
       ) AS activities
+      WHERE created_time IS NOT NULL
       ORDER BY created_time DESC
       LIMIT 10;
     `;

@@ -560,11 +560,37 @@ exports.getOrderById = async (order_id, id) => {
 
     const itemsRes = await pool.query(
         `
-        SELECT *
-        FROM public.order_items
-        WHERE order_id = $1
-        ORDER BY created_time ASC
-        `,
+    SELECT 
+        oi.*,
+
+        p.weight,
+        p.length,
+        p.width,
+        p.height,
+
+        json_build_object(
+            'single', json_build_object(
+                'length', COALESCE(p.length, 0),
+                'width', COALESCE(p.width, 0),
+                'height', COALESCE(p.height, 0),
+                'weight', COALESCE(p.weight, 0)
+            ),
+            'quantity', oi.quantity,
+            'final_pack', json_build_object(
+                'length', COALESCE(p.length, 0),
+                'width', COALESCE(p.width, 0),
+                'height', COALESCE(p.height, 0) * COALESCE(oi.quantity, 1),
+                'weight', COALESCE(p.weight, 0) * COALESCE(oi.quantity, 1)
+            )
+        ) AS dimension
+
+    FROM public.order_items oi
+    LEFT JOIN public.products p 
+        ON p.id = oi.product_id
+
+    WHERE oi.order_id = $1
+    ORDER BY oi.created_time ASC
+    `,
         [order_id]
     );
 
@@ -597,7 +623,7 @@ exports.getOrderById = async (order_id, id) => {
 
     const sellerAddress = await pool.query(
         `SELECT * from public.address where user_id = 'f489a32d-2b11-49c2-8a3e-36505396bd32'`
-       
+
     )
     console.log("sellerAddress", sellerDetails.rows[0].id)
 
@@ -606,7 +632,7 @@ exports.getOrderById = async (order_id, id) => {
         items: itemsRes.rows,
         address_snapshot: addressRes.rows[0] || null,
         user_snapshot: userRes.rows[0] || null,
-        seller_info: {info: sellerDetails.rows[0], address: sellerAddress?.rows[0]} || null
+        seller_info: { info: sellerDetails.rows[0], address: sellerAddress?.rows[0] } || null
     };
 };
 

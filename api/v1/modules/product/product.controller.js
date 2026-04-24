@@ -81,21 +81,21 @@ const createProduct = async (req, res) => {
     try {
         const data = req.body;
         const userId = req.user?.id;
-        
+
         if (!userId) {
             return Response.notFound(res, "Seller not authenticated");
         }
-        
+
         if (!req.files || req.files.length === 0) {
             return Response.badRequest(res, "At least one image is required");
         }
         // 🔹 Upload Images
         const uploadResults = await UTILS.uploadMultiple(req.files);
         const imageUrls = uploadResults.map(file => file.url);
-        
+
         data.imageUrls = imageUrls;
         data.userId = userId;
-        
+
         const product = await productModel.createProduct(data);
 
         return Response.created(res, "Product created successfully", product);
@@ -154,6 +154,7 @@ const safeParse = (data) => {
         return [];
     }
 };
+
 const updateProduct = async (req, res) => {
     try {
         const userId = req.user?.id;
@@ -163,36 +164,114 @@ const updateProduct = async (req, res) => {
             return Response.badRequest(res, "Invalid user or product ID");
         }
 
+        const safeParse = (value, fallback = []) => {
+            if (!value) return fallback;
+            if (Array.isArray(value) || typeof value === "object") return value;
+            try {
+                return JSON.parse(value);
+            } catch {
+                return fallback;
+            }
+        };
 
+        const parseBoolean = (value, def = false) => {
+            if (value === undefined || value === null || value === "") return def;
+            if (typeof value === "boolean") return value;
+            return value.toString().toLowerCase() === "true";
+        };
 
-        const existingImages = safeParse(req.body.existingImages);
-        const deletedImages = safeParse(req.body.deletedImages);
+        const parseNumber = (value, def = null) => {
+            if (value === undefined || value === null || value === "") return def;
+            const num = Number(value);
+            return Number.isNaN(num) ? def : num;
+        };
 
+        // images
+        const existingImages = safeParse(req.body.existingImages, []);
+        const deletedImages = safeParse(req.body.deletedImages, []);
 
-        await UTILS.removeMultiple(deletedImages);
+        if (deletedImages.length > 0) {
+            await UTILS.removeMultiple(deletedImages);
+        }
 
         let newImageUrls = [];
-
-        if (req.files && req.files.length > 0) {
+        if (req.files?.length > 0) {
             const uploadResults = await UTILS.uploadMultiple(req.files);
             newImageUrls = uploadResults.map(file => file.url);
         }
 
-        const finalImages = [
-            ...(existingImages || []),
-            ...newImageUrls
-        ];
+        const finalImages = [...existingImages, ...newImageUrls];
 
-        if (finalImages.length === 0 && !existingImages.length) {
+        if (finalImages.length === 0) {
             return Response.badRequest(res, "At least one image is required");
         }
 
         const payload = {
-            ...req.body,
-            image_url: finalImages,
+            id: productId,
             modified_by: userId,
-            id: productId
+
+            // basic
+            title: req.body.title?.trim() || null,
+            description: req.body.description || null,
+            brand: req.body.brand || null,
+            category: req.body.category || null,
+            tag: req.body.tag || null,
+
+            // pricing
+            base_price: parseNumber(req.body.base_price, 0),
+            old_price: parseNumber(req.body.old_price, null),
+            discount: parseNumber(req.body.discount, 0),
+
+            // tax
+            tax_percentage: parseNumber(req.body.tax_percentage, 0),
+            tax_inclusive: parseBoolean(req.body.tax_inclusive, true),
+
+            // inventory
+            stock: parseNumber(req.body.stock, 0),
+            min_stock_alert: parseNumber(req.body.min_stock_alert, 5),
+
+            // shipping
+            weight: parseNumber(req.body.weight, null),
+            length: parseNumber(req.body.length, null),
+            width: parseNumber(req.body.width, null),
+            height: parseNumber(req.body.height, null),
+
+            // delivery
+            delivery_days: parseNumber(req.body.delivery_days, null),
+            is_cod_available: parseBoolean(req.body.is_cod_available, true),
+            is_free_delivery: parseBoolean(req.body.is_free_delivery, false),
+
+            // media
+            image_url: finalImages,
+
+            // customization
+            is_customizable: parseBoolean(req.body.is_customizable, false),
+            customization_type: req.body.customization_type || null,
+            customization_fields: safeParse(req.body.customization_fields, null),
+
+            // returns
+            is_return: parseBoolean(req.body.is_return, false),
+            is_replace: parseBoolean(req.body.is_replace, false),
+            return_replace_duration: parseNumber(req.body.return_replace_duration, null),
+            return_replace_instructions: req.body.return_replace_instructions || null,
+
+            // seo
+            slug: req.body.slug || null,
+            meta_title: req.body.meta_title || null,
+            meta_description: req.body.meta_description || null,
+
+            // analytics (only safe ones)
+            views: parseNumber(req.body.views, 0),
+            clicks: parseNumber(req.body.clicks, 0),
+            wishlist_count: parseNumber(req.body.wishlist_count, 0),
+            cart_count: parseNumber(req.body.cart_count, 0),
+
+            status: req.body.status || "draft",
+
+            variants: safeParse(req.body.variants, []),
         };
+        
+
 
         const result = await productModel.modelHandleUpdateProduct(payload);
 
@@ -207,6 +286,7 @@ const updateProduct = async (req, res) => {
         return Response.serverError(res, error.message);
     }
 };
+
 
 
 const handleDeleteProduct = async (req, res) => {
