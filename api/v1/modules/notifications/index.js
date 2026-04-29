@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const notificationController = require("./notification.controller");
+const authMiddleware = require("../middlewares/index");
 
 router.post("/", notificationController.createNotification);
+router.get("/", authMiddleware, notificationController.getMyNotifications);
 
 router.get("/user/:userId", notificationController.getUserNotifications);
 router.get("/seller/:sellerId", notificationController.getSellerNotifications);

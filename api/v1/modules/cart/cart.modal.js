@@ -27,7 +27,7 @@ const getAllCart = async (user_id) => {
 
         INNER JOIN public.products p 
             ON p.id = c.product_id
-            AND p.status = true  
+            AND p.status = 'true'
 
         LEFT JOIN public.product_variants v
             ON v.id = c.variant_id
@@ -70,18 +70,20 @@ const updateCart = async (quantity, cartId, userId) => {
         }
 
         const item = cartData.rows[0];
-
-        const price = item.final_price || item.base_price;
+        const price = Number(item.final_price || item.base_price || 0);
+        const newAmount = quantity * price;
 
         const result = await pool.query(
             `UPDATE public.cart 
              SET total_quantity = $1,
-                 modified_by = $2,
+                 amount = $2,
+                 modified_by = $3,
                  modified_time = CURRENT_TIMESTAMP
-             WHERE id = $3 AND user_id = $4
+             WHERE id = $4 AND user_id = $5
              RETURNING *`,
             [
                 quantity,
+                newAmount,
                 userId,
                 cartId,
                 userId
@@ -108,9 +110,11 @@ const createCart = async (payload, userId) => {
 
         if (variantId) {
             const variantRes = await pool.query(
-                `SELECT final_price, stock 
-                 FROM product_variants 
-                 WHERE id = $1`,
+                `SELECT v.final_price, v.stock, p.status as product_status, u.status as seller_status
+                 FROM product_variants v
+                 INNER JOIN products p ON p.id = v.product_id
+                 INNER JOIN users u ON u.id = p.seller_id
+                 WHERE v.id = $1`,
                 [variantId]
             );
 
@@ -118,13 +122,23 @@ const createCart = async (payload, userId) => {
                 throw new Error("Variant not found");
             }
 
-            price = variantRes.rows[0].final_price;
+            const v = variantRes.rows[0];
+            if (!v.product_status || v.seller_status !== 'active') {
+                throw new Error("Product or Seller is inactive");
+            }
+
+            if (quantity > v.stock) {
+                throw new Error("Quantity exceeds available stock");
+            }
+
+            price = v.final_price;
 
         } else {
             const productRes = await pool.query(
-                `SELECT base_price 
-                 FROM products 
-                 WHERE id = $1`,
+                `SELECT p.base_price, p.stock, p.status as product_status, u.status as seller_status
+                 FROM products p
+                 INNER JOIN users u ON u.id = p.seller_id
+                 WHERE p.id = $1`,
                 [productId]
             );
 
@@ -132,7 +146,16 @@ const createCart = async (payload, userId) => {
                 throw new Error("Product not found");
             }
 
-            price = productRes.rows[0].base_price;
+            const p = productRes.rows[0];
+            if (!p.product_status || p.seller_status !== 'active') {
+                throw new Error("Product or Seller is inactive");
+            }
+
+            if (quantity > p.stock) {
+                throw new Error("Quantity exceeds available stock");
+            }
+
+            price = p.base_price;
         }
 
 

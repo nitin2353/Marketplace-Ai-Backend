@@ -24,9 +24,13 @@ const getAllWishlist = async (user_id) => {
             FROM public.wishlist w
             INNER JOIN public.products p
                 ON p.id = w.product_id
+            INNER JOIN public.users u
+                ON u.id = p.created_by
             LEFT JOIN public.product_variants v
                 ON v.product_id = p.id
-            WHERE w.user_id = $1
+            WHERE w.user_id = $1 
+              AND u.status = 'active'
+              AND (p.status = 'true' OR p.status IS NULL)
             GROUP BY 
                 w.id,
                 w.user_id,
@@ -40,7 +44,6 @@ const getAllWishlist = async (user_id) => {
                 p.old_price,
                 p.discount,
                 p.rating,
-                p.reviews,
                 p.sold,
                 p.brand,
                 p.category,
@@ -82,6 +85,17 @@ const toggleWishlist = async (id, userId) => {
             );
 
             return { message: "Removed from wishlist" };
+        }
+
+        const productCheck = await pool.query(
+            `SELECT p.id FROM public.products p
+             INNER JOIN public.users u ON u.id = p.created_by
+             WHERE p.id = $1 AND u.status = 'active' AND (p.status = 'true' OR p.status IS NULL)`,
+            [id]
+        );
+
+        if (productCheck.rows.length === 0) {
+            throw new Error("Cannot add product: Product is inactive or seller is not active");
         }
 
 

@@ -15,8 +15,8 @@ const wishlist = require('../api/v1/modules/wishlist')
 const address = require('../api/v1/modules/address')
 const report = require('../api/v1/modules/report')
 const notification = require("../api/v1/modules/notifications");
-
-
+const review = require('../api/v1/modules/review');
+const user = require('../api/v1/modules/user');
 
 router.use('/requirement', requirement)
     .use('/quote', quote)
@@ -31,7 +31,9 @@ router.use('/requirement', requirement)
     .use('/wishlist', wishlist)
     .use('/address', address)
     .use('/report', report)
-    .use("/notification", notification);
+    .use('/review', review)
+    .use("/notification", notification)
+    .use('/user', user);
 
 
 module.exports = router;

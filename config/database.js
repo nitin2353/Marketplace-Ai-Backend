@@ -9,7 +9,7 @@ const pool = new Pool({
   port: dbConfig.port,
 });
 
-// Optional: Test connection once
+
 pool.query('SELECT NOW()')
   .then(() => console.log('✅ Database connected successfully'))
   .catch((err) => console.error('❌ DB Connection Error:', err));

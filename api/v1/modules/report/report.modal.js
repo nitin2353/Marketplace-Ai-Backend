@@ -7,49 +7,47 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 exports.getSellerSummary = async (sellerId) => {
   const summaryQuery = `
     SELECT
-      COALESCE(COUNT(DISTINCT p.id), 0) AS total_products,
-      COALESCE(SUM(p.sold), 0) AS total_units_sold,
-      COALESCE(SUM(p.base_price * p.sold), 0) AS estimated_revenue,
-      COALESCE(AVG(p.rating), 0) AS avg_rating,
-      COALESCE(SUM(p.reviews), 0) AS total_reviews
-    FROM products p
+      COALESCE(COUNT(DISTINCT p.id), 0) AS total_products
+    FROM public.products p
+    INNER JOIN public.users u ON u.id = p.seller_id
     WHERE p.seller_id = $1
-      AND COALESCE(p.status, true) = true;
+      AND p.status IN ('active', 'published', 'true')
+      AND u.status = 'active';
   `;
 
-  const ordersQuery = `
+  const salesQuery = `
     SELECT
-      COALESCE(COUNT(o.id), 0) AS total_orders,
-      COALESCE(SUM(o.total_amount), 0) AS total_order_amount
-    FROM orders o
-    JOIN order_items oi ON oi.order_id = o.id
-    JOIN products p ON p.id = oi.product_id
-    WHERE p.seller_id = $1;
-  `;
-
-  const paymentQuery = `
-    SELECT
-      COALESCE(SUM(pay.amount), 0) AS total_payment_received,
-      COALESCE(SUM(pay.platform_fee), 0) AS total_platform_fee,
-      COALESCE(SUM(pay.seller_amount), 0) AS total_seller_amount
-    FROM payments pay
-    JOIN orders o ON o.id = pay.order_id
-    JOIN order_items oi ON oi.order_id = o.id
-    JOIN products p ON p.id = oi.product_id
+      COALESCE(SUM(oi.quantity), 0) AS total_units_sold,
+      COALESCE(SUM(oi.line_total), 0)::float AS total_revenue,
+      COALESCE(COUNT(DISTINCT o.id), 0) AS total_orders
+    FROM public.order_items oi
+    JOIN public.orders o ON o.id = oi.order_id
+    JOIN public.products p ON p.id = oi.product_id
+    INNER JOIN public.users u ON u.id = p.seller_id
     WHERE p.seller_id = $1
-      AND pay.status = 'released';
+      AND (o.payment_status = 'paid' OR o.order_status IN ('delivered', 'completed'))
+      AND u.status = 'active';
   `;
 
-  const [summaryRes, ordersRes, paymentRes] = await Promise.all([
+  const reviewQuery = `
+    SELECT
+      COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float AS avg_rating,
+      COALESCE(COUNT(r.id), 0) AS total_reviews
+    FROM public.reviews r
+    INNER JOIN public.users u ON u.id = r.seller_id
+    WHERE r.seller_id = $1 AND u.status = 'active';
+  `;
+
+  const [summaryRes, salesRes, reviewRes] = await Promise.all([
     pool.query(summaryQuery, [sellerId]),
-    pool.query(ordersQuery, [sellerId]),
-    pool.query(paymentQuery, [sellerId]),
+    pool.query(salesQuery, [sellerId]),
+    pool.query(reviewQuery, [sellerId]),
   ]);
 
   return {
     ...summaryRes.rows[0],
-    ...ordersRes.rows[0],
-    ...paymentRes.rows[0],
+    ...salesRes.rows[0],
+    ...reviewRes.rows[0],
   };
 };
 

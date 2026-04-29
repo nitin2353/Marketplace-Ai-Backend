@@ -83,7 +83,7 @@ exports.createOrder = async (req, res) => {
 // =====================================
 exports.getCustomerOrders = async (req, res) => {
     try {
-        const { user_id } = req.params;
+        const user_id = req.user.id; // Enforce logged-in user ID
 
         const data = await orderService.getCustomerOrders(user_id);
 
@@ -106,14 +106,15 @@ exports.getCustomerOrders = async (req, res) => {
 // =====================================
 exports.getCustomerOrderById = async (req, res) => {
     try {
-        const { user_id, order_id } = req.params;
+        const user_id = req.user.id; // Enforce logged-in user ID
+        const { order_id } = req.params;
 
         const data = await orderService.getCustomerOrderById(user_id, order_id);
 
         if (!data) {
             return res.status(404).json({
                 success: false,
-                message: "Order not found"
+                message: "Order not found or unauthorized"
             });
         }
 
@@ -186,13 +187,14 @@ exports.getSellerOrderById = async (req, res) => {
 exports.getOrderById = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const {id, user_id} = req?.user || req.params;
+        const user_id = req.user.id;
         
-        const data = await orderService.getOrderById(order_id, id);
+        // For security, customers can only see their own orders
+        const data = await orderService.getOrderById(order_id, user_id);
         if (!data) {
             return res.status(404).json({
                 success: false,
-                message: "Order not found"
+                message: "Order not found or unauthorized"
             });
         }
         
@@ -216,6 +218,13 @@ exports.getOrderById = async (req, res) => {
 exports.getOrderItems = async (req, res) => {
     try {
         const { order_id } = req.params;
+        const user_id = req.user.id;
+
+        // Verify ownership before returning items
+        const order = await orderService.getCustomerOrderById(user_id, order_id);
+        if (!order) {
+            return res.status(403).json({ success: false, message: "Unauthorized access to order items" });
+        }
 
         const data = await orderService.getOrderItems(order_id);
 
@@ -239,6 +248,13 @@ exports.getOrderItems = async (req, res) => {
 exports.getOrderAddressSnapshot = async (req, res) => {
     try {
         const { order_id } = req.params;
+        const user_id = req.user.id;
+
+        // Verify ownership
+        const order = await orderService.getCustomerOrderById(user_id, order_id);
+        if (!order) {
+            return res.status(403).json({ success: false, message: "Unauthorized access to address snapshot" });
+        }
 
         const data = await orderService.getOrderAddressSnapshot(order_id);
 
@@ -269,6 +285,13 @@ exports.getOrderAddressSnapshot = async (req, res) => {
 exports.getOrderUserSnapshot = async (req, res) => {
     try {
         const { order_id } = req.params;
+        const user_id = req.user.id;
+
+        // Verify ownership
+        const order = await orderService.getCustomerOrderById(user_id, order_id);
+        if (!order) {
+            return res.status(403).json({ success: false, message: "Unauthorized access to user snapshot" });
+        }
 
         const data = await orderService.getOrderUserSnapshot(order_id);
 
@@ -431,9 +454,19 @@ exports.verifyOrderPayment = async (req, res) => {
 exports.cancelOrder = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const modified_by = req.user?.id || req.body.modified_by || null;
+        const user_id = req.user.id;
 
-        const data = await orderService.cancelOrder(order_id, modified_by);
+        // Verify ownership
+        const order = await orderService.getCustomerOrderById(user_id, order_id);
+        if (!order) {
+            return res.status(403).json({ success: false, message: "Unauthorized to cancel this order" });
+        }
+
+        if (order.order_status === 'delivered' || order.order_status === 'cancelled') {
+             return res.status(400).json({ success: false, message: `Cannot cancel order in ${order.order_status} state` });
+        }
+
+        const data = await orderService.cancelOrder(order_id, user_id);
 
         return res.status(200).json({
             success: true,

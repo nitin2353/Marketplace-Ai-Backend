@@ -111,15 +111,15 @@ const getAllAddresses = async () => {
 };
 
 // GET ADDRESS BY ID
-const getAddressById = async (id) => {
+const getAddressById = async (id, user_id) => {
     try {
         const query = `
             SELECT ${ADDRESS_FIELDS}
             FROM public.address
-            WHERE id = $1
+            WHERE id = $1 AND user_id = $2
         `;
 
-        const result = await pool.query(query, [id]);
+        const result = await pool.query(query, [id, user_id]);
         return result.rows[0];
     } catch (error) {
         throw error;
@@ -144,13 +144,12 @@ const getAddressesByUserId = async (user_id) => {
 };
 
 // UPDATE ADDRESS
-const updateAddress = async (id, data) => {
+const updateAddress = async (id, user_id, data) => {
     try {
         const {
             country_code,
             address_line_1,
             name,
-            user_id,
             mobile,
             address_line_2,
             country,
@@ -169,19 +168,18 @@ const updateAddress = async (id, data) => {
                 country_code = $1,
                 address_line_1 = $2,
                 name = $3,
-                user_id = $4,
-                mobile = $5,
-                address_line_2 = $6,
-                country = $7,
-                state = $8,
-                city = $9,
-                pincode = $10,
-                label = $11,
-                instructions = $12,
-                phone = $13,
-                modified_by = $14,
+                mobile = $4,
+                address_line_2 = $5,
+                country = $6,
+                state = $7,
+                city = $8,
+                pincode = $9,
+                label = $10,
+                instructions = $11,
+                phone = $12,
+                modified_by = $13,
                 modified_time = NOW()
-            WHERE id = $15
+            WHERE id = $14 AND user_id = $15
             RETURNING ${ADDRESS_FIELDS}
         `;
 
@@ -189,7 +187,6 @@ const updateAddress = async (id, data) => {
             country_code,
             address_line_1,
             name,
-            user_id,
             mobile,
             address_line_2,
             country,
@@ -200,7 +197,8 @@ const updateAddress = async (id, data) => {
             instructions,
             phone,
             modified_by,
-            id
+            id,
+            user_id
         ];
 
         const result = await pool.query(query, values);
@@ -211,15 +209,15 @@ const updateAddress = async (id, data) => {
 };
 
 // DELETE ADDRESS
-const deleteAddress = async (id) => {
+const deleteAddress = async (id, user_id) => {
     try {
         const query = `
             DELETE FROM public.address
-            WHERE id = $1
+            WHERE id = $1 AND user_id = $2
             RETURNING id
         `;
 
-        const result = await pool.query(query, [id]);
+        const result = await pool.query(query, [id, user_id]);
         return result.rows[0];
     } catch (error) {
         throw error;

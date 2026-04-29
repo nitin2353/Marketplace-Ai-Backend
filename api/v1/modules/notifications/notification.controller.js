@@ -17,6 +17,22 @@ exports.createNotification = async (req, res) => {
     }
 };
 
+exports.getMyNotifications = async (req, res) => {
+    try {
+        const data = await notificationService.getMyNotifications(req);
+        return res.json({
+            success: true,
+            data
+        });
+    } catch (error) {
+        console.error("getMyNotifications error:", error);
+        return res.status(500).json({
+            success: false,
+            error: error.message || "Internal Server Error"
+        });
+    }
+};
+
 exports.getUserNotifications = async (req, res) => {
     try {
         const { userId } = req.params;

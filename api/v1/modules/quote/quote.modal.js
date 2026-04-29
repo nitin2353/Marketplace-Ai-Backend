@@ -20,10 +20,9 @@ exports.createQuote = async (body) => {
 exports.getQuotesByRequirement = async (requirementId) => {
 
   const query = `
-    SELECT q.*, s.rating, u.name AS seller_name
+    SELECT q.*, 0 AS rating, u.name AS seller_name
     FROM quotes q
-    JOIN sellers s ON q.seller_id = s.id
-    JOIN users u ON s.user_id = u.id
+    JOIN users u ON q.seller_id = u.id
     WHERE q.requirement_id = $1
     ORDER BY q.created_at DESC;
   `;

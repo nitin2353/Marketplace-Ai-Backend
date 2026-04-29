@@ -4,8 +4,10 @@ const AddressModal = require('./address.modal');
 
 const getAllAddresses = async (req, res) => {
     try {
-        const data = await AddressModal.getAllAddresses();
-        Response.success(res, "Get All Addresses Successfully", data);
+        // Customers should only see their own addresses
+        const userId = req.user.id;
+        const data = await AddressModal.getAddressesByUserId(userId);
+        Response.success(res, "Get Addresses Successfully", data);
     } catch (err) {
         Response.serverError(res, err.message || "Internal Server error");
     }
@@ -15,10 +17,11 @@ const getAllAddresses = async (req, res) => {
 const getAddressById = async (req, res) => {
     try {
         const { id } = req.params;
-        const data = await AddressModal.getAddressById(id);
+        const userId = req.user.id;
+        const data = await AddressModal.getAddressById(id, userId);
 
         if (!data) {
-            return Response.notFound(res, "Address not found");
+            return Response.notFound(res, "Address not found or unauthorized");
         }
 
         Response.success(res, "Get Address Successfully", data);
@@ -65,14 +68,13 @@ const updateAddress = async (req, res) => {
 
         const updateData = {
             ...payload,
-            modified_by: userId,
-            user_id: userId
+            modified_by: userId
         };
 
-        const data = await AddressModal.updateAddress(id, updateData);
+        const data = await AddressModal.updateAddress(id, userId, updateData);
 
         if (!data) {
-            return Response.notFound(res, "Address not found");
+            return Response.notFound(res, "Address not found or unauthorized");
         }
 
         Response.success(res, "Address updated successfully", data);
@@ -85,10 +87,11 @@ const updateAddress = async (req, res) => {
 const deleteAddress = async (req, res) => {
     try {
         const { id } = req.params;
-        const data = await AddressModal.deleteAddress(id);
+        const userId = req.user.id;
+        const data = await AddressModal.deleteAddress(id, userId);
 
         if (!data) {
-            return Response.notFound(res, "Address not found");
+            return Response.notFound(res, "Address not found or unauthorized");
         }
 
         Response.success(res, "Address deleted successfully", data);

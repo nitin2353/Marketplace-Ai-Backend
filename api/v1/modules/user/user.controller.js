@@ -1,0 +1,73 @@
+const userModel = require("./user.modal");
+const Response = require("../response");
+
+exports.getProfile = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await userModel.findUserById(userId);
+        if (!user) return Response.notFound(res, "User not found");
+
+        // Mask account number for security
+        if (user.account_number) {
+            user.account_number = user.account_number.slice(0, 2) + "********" + user.account_number.slice(-4);
+        }
+
+        return Response.success(res, "Profile fetched successfully", user);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+exports.updateProfile = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const data = { ...req.body };
+
+        if (req.file) {
+            // If running on local, usually we return the relative path or full URL
+            // Assuming environment provides a base URL or we just store filename
+            data.avatar = req.file.filename; 
+        }
+
+        const user = await userModel.updateProfile(userId, data);
+        return Response.success(res, "Profile updated successfully", user);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+exports.updateStore = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await userModel.updateStore(userId, req.body);
+        return Response.success(res, "Store info updated successfully", user);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+exports.updatePayment = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        // Basic validation for payment details
+        const { ifsc, account_number } = req.body;
+        if (ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc)) {
+            return Response.badRequest(res, "Invalid IFSC code format");
+        }
+
+        const user = await userModel.updatePayment(userId, req.body);
+        return Response.success(res, "Payment details updated successfully", user);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+exports.updateNotificationPreferences = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const user = await userModel.updateNotificationPrefs(userId, req.body);
+        return Response.success(res, "Notification preferences updated successfully", user);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};

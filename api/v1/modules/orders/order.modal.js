@@ -102,15 +102,16 @@ exports.createOrderFromCart = async ({
                 id,
                 name,
                 email,
-                phone
+                phone,
+                status
             FROM public.users
-            WHERE id = $1
+            WHERE id = $1 AND status = 'active'
             `,
             [user_id]
         );
 
         if (userRes.rows.length === 0) {
-            throw new Error("User not found");
+            throw new Error("User account is inactive or not found");
         }
 
         const user = userRes.rows[0];
@@ -341,31 +342,10 @@ exports.createOrderFromCart = async ({
             ]
         );
 
-        if (payment_method === "cod") {
-            for (const item of cartItems) {
-                if (item.variant_id) {
-                    await client.query(
-                        `
-                        UPDATE public.product_variants
-                        SET stock = stock - $1,
-                            modified_time = NOW()
-                        WHERE id = $2
-                        `,
-                        [item.total_quantity, item.variant_id]
-                    );
-                } else {
-                    await client.query(
-                        `
-                        UPDATE public.products
-                        SET stock = stock - $1,
-                            modified_time = NOW()
-                        WHERE id = $2
-                        `,
-                        [item.total_quantity, item.product_id]
-                    );
-                }
-            }
-        }
+        // 10. DEDUCT STOCK (Atomic) - REMOVED FROM CREATION
+        // Stock is now ONLY deducted after successful payment (Razorpay) 
+        // or order confirmation (COD). This prevents overselling and stock locking.
+        console.log("Order created. Stock validation passed. Deduction deferred to payment/confirmation.");
 
 
         await client.query(
@@ -393,15 +373,37 @@ exports.createOrderFromCart = async ({
 exports.getCustomerOrders = async (user_id) => {
     const res = await pool.query(
         `
-        SELECT *
-        FROM public.orders
-        WHERE user_id = $1
-        ORDER BY created_time DESC
+        SELECT o.*
+        FROM public.orders o
+        INNER JOIN public.users u ON u.id = o.user_id
+        WHERE o.user_id = $1 AND u.status = 'active'
+        ORDER BY o.created_time DESC
         `,
         [user_id]
     );
 
-    return res.rows;
+    const orders = res.rows;
+    for (const order of orders) {
+        const itemsRes = await pool.query(
+            `SELECT * FROM public.order_items WHERE order_id = $1 ORDER BY created_time ASC`,
+            [order.id]
+        );
+        order.items = itemsRes.rows;
+
+        const addressRes = await pool.query(
+            `SELECT * FROM public.order_address_snapshot WHERE order_id = $1`,
+            [order.id]
+        );
+        order.address_snapshot = addressRes.rows[0] || null;
+
+        const userRes = await pool.query(
+            `SELECT * FROM public.order_user_snapshot WHERE order_id = $1`,
+            [order.id]
+        );
+        order.user_snapshot = userRes.rows[0] || null;
+    }
+
+    return orders;
 };
 
 
@@ -462,20 +464,47 @@ exports.getSellerOrders = async (seller_id) => {
     const res = await pool.query(
         `
     SELECT DISTINCT 
-        o.*,
-        oi.product_id   -- ✅ ye add kar diya
+        o.*
     FROM public.orders o
     INNER JOIN public.order_items oi
         ON oi.order_id = o.id
     INNER JOIN public.products p
         ON p.id = oi.product_id
-    WHERE p.seller_id = $1
+    INNER JOIN public.users u ON u.id = p.seller_id
+    WHERE p.seller_id = $1 AND u.status = 'active'
     ORDER BY o.created_time DESC
     `,
         [seller_id]
     );
 
-    return res.rows;
+    const orders = res.rows;
+    for (const order of orders) {
+        const itemsRes = await pool.query(
+            `
+            SELECT oi.*
+            FROM public.order_items oi
+            INNER JOIN public.products p ON p.id = oi.product_id
+            WHERE oi.order_id = $1 AND p.seller_id = $2
+            ORDER BY oi.created_time ASC
+            `,
+            [order.id, seller_id]
+        );
+        order.items = itemsRes.rows;
+
+        const addressRes = await pool.query(
+            `SELECT * FROM public.order_address_snapshot WHERE order_id = $1`,
+            [order.id]
+        );
+        order.address_snapshot = addressRes.rows[0] || null;
+
+        const userRes = await pool.query(
+            `SELECT * FROM public.order_user_snapshot WHERE order_id = $1`,
+            [order.id]
+        );
+        order.user_snapshot = userRes.rows[0] || null;
+    }
+
+    return orders;
 };
 
 // =====================================
@@ -542,14 +571,14 @@ exports.getSellerOrderById = async (seller_id, order_id) => {
     };
 };
 
-exports.getOrderById = async (order_id, id) => {
+exports.getOrderById = async (order_id, user_id) => {
     const orderRes = await pool.query(
         `
         SELECT *
         FROM public.orders
-        WHERE id = $1
+        WHERE id = $1 AND user_id = $2
         `,
-        [order_id]
+        [order_id, user_id]
     );
 
     if (orderRes.rows.length === 0) {
@@ -614,25 +643,29 @@ exports.getOrderById = async (order_id, id) => {
 
     const sellerDetails = await pool.query(
         `
-        SELECT *
+        SELECT id, name, email, phone, business_name, store_description, avatar, status
         FROM public.users
-        WHERE id = $1
+        WHERE id = (
+            SELECT created_by FROM public.products WHERE id = (
+                SELECT product_id FROM public.order_items WHERE order_id = $1 LIMIT 1
+            )
+        )
         `,
-        [id]
+        [order_id]
     );
 
-    const sellerAddress = await pool.query(
-        `SELECT * from public.address where user_id = 'f489a32d-2b11-49c2-8a3e-36505396bd32'`
-
-    )
-    console.log("sellerAddress", sellerDetails.rows[0].id)
+    const sellerAddress = sellerDetails.rows[0]?.id ? await pool.query(
+        `SELECT * from public.address where user_id = $1`,
+        [sellerDetails.rows[0].id]
+    ) : { rows: [] };
+    console.log("sellerDetails fetched for order details")
 
     return {
         ...order,
         items: itemsRes.rows,
         address_snapshot: addressRes.rows[0] || null,
         user_snapshot: userRes.rows[0] || null,
-        seller_info: { info: sellerDetails.rows[0], address: sellerAddress?.rows[0] } || null
+        seller_info: { info: sellerDetails.rows[0] || null, address: sellerAddress?.rows[0] || null }
     };
 };
 
@@ -642,10 +675,31 @@ exports.getOrderById = async (order_id, id) => {
 exports.getOrderItems = async (order_id) => {
     const res = await pool.query(
         `
-        SELECT *
-        FROM public.order_items
-        WHERE order_id = $1
-        ORDER BY created_time ASC
+        SELECT 
+            oi.*,
+            p.weight,
+            p.length,
+            p.width,
+            p.height,
+            json_build_object(
+                'single', json_build_object(
+                    'length', COALESCE(p.length, 0),
+                    'width', COALESCE(p.width, 0),
+                    'height', COALESCE(p.height, 0),
+                    'weight', COALESCE(p.weight, 0)
+                ),
+                'quantity', oi.quantity,
+                'final_pack', json_build_object(
+                    'length', COALESCE(p.length, 0),
+                    'width', COALESCE(p.width, 0),
+                    'height', COALESCE(p.height, 0) * COALESCE(oi.quantity, 1),
+                    'weight', COALESCE(p.weight, 0) * COALESCE(oi.quantity, 1)
+                )
+            ) AS dimension
+        FROM public.order_items oi
+        LEFT JOIN public.products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_time ASC
         `,
         [order_id]
     );
@@ -689,23 +743,53 @@ exports.getOrderUserSnapshot = async (order_id) => {
 // UPDATE ORDER STATUS
 // =====================================
 exports.updateOrderStatus = async (order_id, order_status, modified_by = null) => {
-    const res = await pool.query(
-        `
-        UPDATE public.orders
-        SET order_status = $1,
-            modified_by = $2,
-            modified_time = NOW()
-        WHERE id = $3
-        RETURNING *
-        `,
-        [order_status, modified_by, order_id]
-    );
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
 
-    if (res.rows.length === 0) {
-        throw new Error("Order not found");
+        const orderCheck = await client.query("SELECT * FROM public.orders WHERE id = $1", [order_id]);
+        if (orderCheck.rows.length === 0) throw new Error("Order not found");
+        const order = orderCheck.rows[0];
+
+        // If status changing to confirmed and it's COD/Unpaid, deduct stock now
+        if (order_status === "confirmed" && order.order_status !== "confirmed") {
+            const itemsRes = await client.query("SELECT * FROM public.order_items WHERE order_id = $1", [order_id]);
+            
+            for (const item of itemsRes.rows) {
+                const quantity = Number(item.quantity || 0);
+                if (item.variant_id) {
+                    const vRes = await client.query(
+                        `UPDATE public.product_variants SET stock = stock - $1, modified_time = NOW() WHERE id = $2 AND stock >= $1 RETURNING id`,
+                        [quantity, item.variant_id]
+                    );
+                    if (vRes.rows.length === 0) throw new Error(`Insufficient stock for variant: ${item.product_title}`);
+                    await client.query(
+                        `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1), modified_time = NOW() WHERE id = $1`,
+                        [item.product_id]
+                    );
+                } else {
+                    const pRes = await client.query(
+                        `UPDATE public.products SET stock = stock - $1, modified_time = NOW() WHERE id = $2 AND stock >= $1 RETURNING id`,
+                        [quantity, item.product_id]
+                    );
+                    if (pRes.rows.length === 0) throw new Error(`Insufficient stock for product: ${item.product_title}`);
+                }
+            }
+        }
+
+        const res = await client.query(
+            `UPDATE public.orders SET order_status = $1, modified_by = $2, modified_time = NOW() WHERE id = $3 RETURNING *`,
+            [order_status, modified_by, order_id]
+        );
+
+        await client.query("COMMIT");
+        return res.rows[0];
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
     }
-
-    return res.rows[0];
 };
 
 // =====================================
@@ -802,27 +886,50 @@ exports.verifyOrderPayment = async ({
             [order_id]
         );
 
+        // 6. DEDUCT STOCK (Atomic)
+        // Since we moved deduction here for Razorpay, we execute it now.
         for (const item of itemsRes.rows) {
+            const quantity = Number(item.quantity || 0);
             if (item.variant_id) {
-                await client.query(
-                    `
-                    UPDATE public.product_variants
-                    SET stock = stock - $1,
-                        modified_time = NOW()
-                    WHERE id = $2
-                    `,
-                    [item.quantity, item.variant_id]
+                const vRes = await client.query(
+                    `UPDATE public.product_variants
+                     SET stock = stock - $1, modified_time = NOW()
+                     WHERE id = $2 AND stock >= $1
+                     RETURNING id`,
+                    [quantity, item.variant_id]
                 );
+                if (vRes.rows.length === 0) throw new Error(`Insufficient stock for variant: ${item.product_title}`);
+                
+                await client.query(
+                    `UPDATE public.products
+                     SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1),
+                         modified_time = NOW()
+                     WHERE id = $1`,
+                    [item.product_id]
+                );
+            } else {
+                const pRes = await client.query(
+                    `UPDATE public.products
+                     SET stock = stock - $1, modified_time = NOW()
+                     WHERE id = $2 AND stock >= $1
+                     RETURNING id`,
+                    [quantity, item.product_id]
+                );
+                if (pRes.rows.length === 0) throw new Error(`Insufficient stock for product: ${item.product_title}`);
             }
         }
 
         await client.query("COMMIT");
 
         return {
-            order_id: order.id,
-            payment_status: "paid",
-            order_status: "confirmed",
-            razorpay_payment_id
+            success: true,
+            message: "Payment verified and order confirmed",
+            data: {
+                order_id: order.id,
+                payment_status: "paid",
+                order_status: "confirmed",
+                razorpay_payment_id
+            }
         };
     } catch (error) {
         await client.query("ROLLBACK");

@@ -5,7 +5,12 @@ const cors = require("cors");
 const path = require("path");
 require("dotenv").config();
 
-application.use(cors());
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+};
+application.use(cors(corsOptions));
 application.use(express.json());
 
 application.use('/api/v1', Routers);

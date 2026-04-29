@@ -51,8 +51,9 @@ const getAllProducts = async (role = "customer", id = "") => {
                         '[]'
                     ) AS variants
                 FROM products p
+                INNER JOIN users u ON u.id = p.seller_id
                 LEFT JOIN product_variants v ON v.product_id = p.id
-                WHERE p.status = true
+                WHERE u.status = 'active' AND (p.status = 'true' OR p.status IS NULL)
                 GROUP BY p.id
                 ORDER BY p.created_at DESC;
             `;
@@ -87,8 +88,9 @@ const getProductById = async (id) => {
                     '[]'
                 ) AS variants
             FROM products p
+            INNER JOIN users u ON u.id = p.seller_id
             LEFT JOIN product_variants v ON v.product_id = p.id
-            WHERE p.id = $1
+            WHERE p.id = $1 AND u.status = 'active'
             GROUP BY p.id;
         `;
 
@@ -307,7 +309,7 @@ const createProduct = async (data) => {
             parseNumber(data.wishlist_count, 0),
             parseNumber(data.cart_count, 0),
 
-            data.status || "draft",
+            parseBoolean(data.status === "active" || data.status === "true" || data.status === true, true),
             data.userId || null,
             data.userId || null
         ];
@@ -348,10 +350,20 @@ const createProduct = async (data) => {
 
                 await client.query(variantQuery, variantValues);
             }
+
+            await client.query(
+                `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1) WHERE id = $1`,
+                [product.id]
+            );
         }
 
         await client.query("COMMIT");
-        return product;
+        
+        const finalProductRes = await pool.query(
+            "SELECT p.*, COALESCE(json_agg(v.*) FILTER (WHERE v.id IS NOT NULL), '[]') as variants FROM products p LEFT JOIN product_variants v ON v.product_id = p.id WHERE p.id = $1 GROUP BY p.id",
+            [product.id]
+        );
+        return finalProductRes.rows[0];
     } catch (error) {
         await client.query("ROLLBACK");
         console.error("MODEL CREATE PRODUCT ERROR:", error.message);
@@ -436,7 +448,7 @@ const modelHandleUpdateProduct = async (data) => {
             data.slug || null,
             data.meta_title || null,
             data.meta_description || null,
-            data.status || "draft",
+            parseBoolean(data.status === "active" || data.status === true, true),
             data.category || null,
             data.modified_by,
             data.id
@@ -488,6 +500,11 @@ const modelHandleUpdateProduct = async (data) => {
                     v.old_price ? Number(v.old_price) : null
                 ]);
             }
+
+            await client.query(
+                `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1) WHERE id = $1`,
+                [data.id]
+            );
         }
 
         await client.query("COMMIT");
@@ -529,14 +546,16 @@ const deleteById = async (id) => {
 
 const handleFindByQueryModel = async ({ q, limit, offset }) => {
     const query = `
-    SELECT *
-    FROM public.products
-    WHERE 
-    title ILIKE '%' || $1 || '%'
-    OR description ILIKE '%' || $1 || '%'
-    OR category ILIKE '%' || $1 || '%'
-    OR CAST(base_price AS TEXT) ILIKE '%' || $1 || '%'
-    ORDER BY created_at DESC
+    SELECT p.*
+    FROM public.products p
+    INNER JOIN users u ON u.id = p.seller_id
+    WHERE u.status = 'active' AND (
+    p.title ILIKE '%' || $1 || '%'
+    OR p.description ILIKE '%' || $1 || '%'
+    OR p.category ILIKE '%' || $1 || '%'
+    OR CAST(p.base_price AS TEXT) ILIKE '%' || $1 || '%'
+    )
+    ORDER BY p.created_at DESC
   `;
 
     const values = [q];
@@ -550,13 +569,9 @@ const handleFindByQueryModel = async ({ q, limit, offset }) => {
 const handleFindListByQueryModel = async ({ q, limit, offset }) => {
     const query = `
         SELECT DISTINCT keyword FROM (
-        SELECT title AS keyword FROM products
-        WHERE title ILIKE '%' || $1 || '%'
-
+        SELECT title AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id WHERE u.status = 'active' AND title ILIKE '%' || $1 || '%'
         UNION
-
-        SELECT category AS keyword FROM products
-        WHERE category ILIKE '%' || $1 || '%'
+        SELECT category AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id WHERE u.status = 'active' AND category ILIKE '%' || $1 || '%'
         ) AS suggestions
         LIMIT $2;
   `;
