@@ -13,7 +13,8 @@ exports.createOrder = async (req, res) => {
             payment_order_id,
             payment_id,
             payment_signature,
-            notes
+            notes,
+            cart_items // Added for Buy Now
         } = req.body;
 
         const user_id = req.user?.id || null;
@@ -61,7 +62,8 @@ exports.createOrder = async (req, res) => {
             payment_signature,
             notes,
             created_by,
-            modified_by
+            modified_by,
+            items: cart_items // Pass items if provided (for Buy Now)
         });
 
         return res.status(201).json({
@@ -478,6 +480,39 @@ exports.cancelOrder = async (req, res) => {
         return res.status(500).json({
             success: false,
             message: err.message || "Internal Server Error"
+        });
+    }
+};
+// =====================================
+// BUY NOW (PREVIEW)
+// =====================================
+exports.buyNow = async (req, res) => {
+    try {
+        const { product_id, variant_id, quantity } = req.body;
+
+        if (!product_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'product_id is required'
+            });
+        }
+
+        const data = await orderService.buyNow({
+            product_id,
+            variant_id,
+            quantity: quantity || 1
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Buy now preview generated',
+            data
+        });
+    } catch (err) {
+        console.error('BUY NOW ERROR:', err);
+        return res.status(500).json({
+            success: false,
+            message: err.message || 'Internal Server Error'
         });
     }
 };

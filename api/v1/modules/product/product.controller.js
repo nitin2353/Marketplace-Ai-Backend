@@ -327,6 +327,15 @@ const handleDeleteProduct = async (req, res) => {
 };
 
 
+const handleGetCategorySections = async (req, res) => {
+    try {
+        const sections = await productModel.getCategorySections();
+        return Response.success(res, "Category sections fetched successfully", sections);
+    } catch (error) {
+        return Response.serverError(res, error.message || "Internal Server Error");
+    }
+};
+
 module.exports = {
     handleGetProducts,
     handleFindByQuery,
@@ -334,5 +343,6 @@ module.exports = {
     createProduct,
     updateProduct,
     handleDeleteProduct,
-    handleFindListByQuery
-};
+    handleFindListByQuery,
+    handleGetCategorySections
+};

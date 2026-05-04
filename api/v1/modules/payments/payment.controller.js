@@ -10,7 +10,8 @@ exports.createRazorpayOrder = async (req, res) => {
             discount_percentage = 0,
             delivery_charge = 0,
             subtotal_amount = 0,
-            notes = null
+            notes = null,
+            cart_items // Added for Buy Now
         } = req.body;
 
 
@@ -54,7 +55,8 @@ exports.createRazorpayOrder = async (req, res) => {
             subtotal_amount,
             discount_percentage,
             discount_amount: subtotal_amount * discount_percentage / 100,
-            notes
+            notes,
+            cart_items // Added for Buy Now
         });
 
         return res.status(200).json({
@@ -85,7 +87,8 @@ exports.verifyAndCreateOrder = async (req, res) => {
             subtotal_amount = 0,
             total_amount = 0,
             delivery_charge = 0,
-            notes = null
+            notes = null,
+            cart_items // Added for Buy Now
         } = req.body;
 
         const user_id = req.user?.id || req.body.user_id;
@@ -135,7 +138,8 @@ exports.verifyAndCreateOrder = async (req, res) => {
             delivery_charge,
             notes,
             created_by,
-            modified_by
+            modified_by,
+            cart_items // Added for Buy Now
         });
 
         return res.status(201).json({

@@ -1,7 +1,7 @@
 const pool = require('../../../../config/database');
 
 // CREATE REVIEW
-exports.createReview = async ({ order_id, user_id, seller_id, product_id, rating, comment }) => {
+exports.createReview = async ({ order_id, user_id, seller_id, product_id, rating, comment, images }) => {
  
     const query = `
         INSERT INTO public.reviews (
@@ -10,13 +10,14 @@ exports.createReview = async ({ order_id, user_id, seller_id, product_id, rating
             seller_id,
             product_id,
             rating,
-            comment
+            comment,
+            images
         )
-        VALUES ($1, $2, $3, $4, $5, $6)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING *;
     `;
 
-    const values = [order_id, user_id, seller_id, product_id, rating, comment || null];
+    const values = [order_id, user_id, seller_id, product_id, rating, comment || null, images || []];
     const result = await pool.query(query, values);
     return result.rows[0];
 };
@@ -66,36 +67,28 @@ exports.getSellerReviews = async (sellerId) => {
             r.order_id,
             r.user_id,
             r.seller_id,
+            r.product_id,
             r.rating,
             r.comment,
+            r.images,
+            r.seller_reply,
+            r.seller_reply_at,
             r.created_at,
 
             u.name AS user_name,
             u.email AS user_email,
 
             o.order_number,
-
-            COALESCE(
-                json_agg(
-                    json_build_object(
-                        'product_id', oi.product_id,
-                        'product_title', oi.product_title,
-                        'product_image_url', oi.product_image_url
-                    )
-                ) FILTER (WHERE oi.id IS NOT NULL),
-                '[]'
-            ) AS products
+            p.title as product_title,
+            p.image_url as product_image_url
 
         FROM public.reviews r
         INNER JOIN public.users u_seller ON u_seller.id = r.seller_id
         LEFT JOIN public.users u ON u.id = r.user_id
         LEFT JOIN public.orders o ON o.id = r.order_id
-        LEFT JOIN public.order_items oi ON oi.order_id = r.order_id
-        LEFT JOIN public.products p ON p.id = oi.product_id
+        LEFT JOIN public.products p ON p.id = r.product_id
 
         WHERE r.seller_id = $1 AND u_seller.status = 'active'
-
-        GROUP BY r.id, u.name, u.email, o.order_number
         ORDER BY r.created_at DESC;
     `;
 
@@ -126,31 +119,28 @@ exports.getSellerRatingSummary = async (sellerId) => {
 // GET PRODUCT REVIEWS
 exports.getProductReviews = async (productId) => {
     const query = `
-        SELECT DISTINCT
+        SELECT
             r.id,
             r.order_id,
             r.user_id,
             r.seller_id,
             r.rating,
             r.comment,
+            r.images,
+            r.seller_reply,
+            r.seller_reply_at,
             r.created_at,
 
             u.name AS user_name,
             u.email AS user_email,
-            o.order_number,
-
-            oi.product_id,
-            oi.product_title,
-            oi.product_image_url
+            o.order_number
 
         FROM public.reviews r
-        JOIN public.order_items oi ON oi.order_id = r.order_id
         JOIN public.orders o ON o.id = r.order_id
         INNER JOIN public.users u_seller ON u_seller.id = r.seller_id
         LEFT JOIN public.users u ON u.id = r.user_id
 
-        WHERE oi.product_id = $1 AND u_seller.status = 'active'
-
+        WHERE r.product_id = $1 AND u_seller.status = 'active'
         ORDER BY r.created_at DESC;
     `;
 
@@ -223,5 +213,35 @@ exports.deleteReview = async (reviewId, userId) => {
     `;
 
     const result = await pool.query(query, [reviewId, userId]);
+    return result.rows[0];
+};
+
+// ADD/UPDATE SELLER REPLY
+exports.updateSellerReply = async ({ reviewId, sellerId, reply }) => {
+    const query = `
+        UPDATE public.reviews
+        SET seller_reply = $1,
+            seller_reply_at = NOW()
+        WHERE id = $2
+          AND seller_id = $3
+        RETURNING *;
+    `;
+
+    const result = await pool.query(query, [reply, reviewId, sellerId]);
+    return result.rows[0];
+};
+
+// DELETE SELLER REPLY
+exports.deleteSellerReply = async (reviewId, sellerId) => {
+    const query = `
+        UPDATE public.reviews
+        SET seller_reply = NULL,
+            seller_reply_at = NULL
+        WHERE id = $1
+          AND seller_id = $2
+        RETURNING *;
+    `;
+
+    const result = await pool.query(query, [reviewId, sellerId]);
     return result.rows[0];
 };

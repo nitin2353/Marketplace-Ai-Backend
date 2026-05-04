@@ -27,7 +27,6 @@ const getAllCart = async (user_id) => {
 
         INNER JOIN public.products p 
             ON p.id = c.product_id
-            AND p.status = 'true'
 
         LEFT JOIN public.product_variants v
             ON v.id = c.variant_id

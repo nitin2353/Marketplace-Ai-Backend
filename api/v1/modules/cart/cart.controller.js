@@ -7,7 +7,7 @@ const handleGetCart = async (req, res) => {
         const id = req.user.id
         const data = await CartModal.getAllCart(id);
 
-        Response.success(res, "Get Wishlist Data Successfully", data);
+        Response.success(res, "Get Cart Data Successfully", data);
 
     } catch (err) {
         Response.serverError(res, err.message || "Internal Server error");
@@ -23,7 +23,7 @@ const handleUpdateCart = async (req, res) => {
 
         await CartModal.updateCart(quantity, cartId, userId);
 
-        Response.success(res, "Wishlist updated Successfully");
+        Response.success(res, "Cart updated Successfully");
 
     } catch (err) {
         return Response.serverError(res, error.message || "Internal Server Error");
@@ -41,7 +41,7 @@ const handleCreateCart = async (req, res) => {
         Response.created(res, "Cart Created Successfully", data);
 
     } catch (err) {
-       return Response.serverError(res, err.message || "Internal Server Error");
+        return Response.serverError(res, err.message || "Internal Server Error");
     }
 };
 
@@ -61,7 +61,7 @@ const handleDeleteCart = async (req, res) => {
 
 const handleDeleteAllCartItems = async (req, res) => {
     try {
-        
+
         const userId = req.user.id
 
         const result = await CartModal.deleteCartAll(userId);

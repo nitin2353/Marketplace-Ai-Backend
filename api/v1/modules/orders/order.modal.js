@@ -1,11 +1,90 @@
 const pool = require("../../../../config/database");
 const crypto = require("crypto");
+const notificationTriggers = require("../notifications/notification.trigger");
 
 
 const generateOrderNumber = () => {
     const timestamp = Date.now();
     const random = Math.floor(1000 + Math.random() * 9000);
     return `ORD-${timestamp}-${random}`;
+};
+
+
+exports.buyNow = async ({ product_id, variant_id, quantity }) => {
+    try {
+        const productRes = await pool.query(
+            `
+            SELECT 
+                p.id, p.title, p.base_price, p.image_url, p.seller_id, p.stock, p.status,
+                u.status as seller_status
+            FROM public.products p
+            LEFT JOIN public.users u ON u.id = p.seller_id
+            WHERE p.id = $1
+            `,
+            [product_id]
+        );
+
+        if (productRes.rows.length === 0) {
+            throw new Error("Product not found");
+        }
+
+        const product = productRes.rows[0];
+
+        const isValidProduct = product.status === 'active' || product.status === 'true' || product.status === true;
+
+        if (!isValidProduct) {
+            throw new Error("Product is not available for purchase");
+        }
+
+        if (product.seller_status !== 'active') {
+            throw new Error("Seller is currently inactive");
+        }
+
+        let price = Number(product.base_price);
+        let stock = Number(product.stock);
+        let title = product.title;
+
+        if (variant_id) {
+            const variantRes = await pool.query(
+                `SELECT * FROM public.product_variants WHERE id = $1 AND product_id = $2`,
+                [variant_id, product_id]
+            );
+
+            if (variantRes.rows.length === 0) {
+                throw new Error("Product variant not found");
+            }
+
+            const variant = variantRes.rows[0];
+            price = Number(variant.final_price || variant.price);
+            stock = Number(variant.stock);
+        }
+
+        if (stock < quantity) {
+            throw new Error("Insufficient stock");
+        }
+
+        const subtotal = price * quantity;
+        const delivery = subtotal >= 499 ? 0 : 49;
+        const total = subtotal + delivery;
+
+        return {
+            items: [
+                {
+                    product_id,
+                    variant_id: variant_id || null,
+                    title,
+                    price,
+                    quantity,
+                    total: subtotal
+                }
+            ],
+            subtotal,
+            delivery,
+            total
+        };
+    } catch (error) {
+        throw error;
+    }
 };
 
 
@@ -19,52 +98,89 @@ exports.createOrderFromCart = async ({
     payment_order_id,
     payment_id,
     payment_signature,
+    items = null // Added for Buy Now
 }) => {
     const client = await pool.connect();
 
     try {
         await client.query("BEGIN");
 
-        // 1. GET CART ITEMS
-        const cartRes = await client.query(
-            `
-            SELECT 
-                c.id,
-                c.user_id,
-                c.product_id,
-                c.variant_id,
-                c.total_quantity,
-                c.amount,
+        let cartItems = [];
 
-                p.title,
-                p.description,
-                p.base_price,
-                p.brand,
-                p.category,
-                p.tag,
-                p.image_url,
-                p.seller_id,
+        if (items && items.length > 0) {
+            // BUY NOW FLOW: items are passed directly
+            for (const item of items) {
+                const productRes = await client.query(
+                    `
+                    SELECT 
+                        p.id as product_id, p.title, p.description, p.base_price, p.brand, 
+                        p.category, p.tag, p.image_url, p.seller_id, p.stock as product_stock,
+                        v.id as variant_id, v.color as variant_color, v.size as variant_size, 
+                        v.final_price, v.stock as variant_stock
+                    FROM public.products p
+                    LEFT JOIN public.product_variants v ON v.id = $2
+                    WHERE p.id = $1
+                    `,
+                    [item.product_id, item.variant_id]
+                );
 
-                v.color AS variant_color,
-                v.size AS variant_size,
-                v.final_price,
-                v.stock
-            FROM public.cart c
-            INNER JOIN public.products p 
-                ON p.id = c.product_id
-            LEFT JOIN public.product_variants v
-                ON v.id = c.variant_id
-            WHERE c.user_id = $1
-            ORDER BY c.created_time ASC
-            `,
-            [user_id]
-        );
+                if (productRes.rows.length === 0) {
+                    throw new Error(`Product not found: ${item.product_id}`);
+                }
 
-        if (cartRes.rows.length === 0) {
-            throw new Error("Cart is empty");
+                const row = productRes.rows[0];
+                cartItems.push({
+                    ...row,
+                    total_quantity: item.quantity,
+                    variant_id: item.variant_id || null,
+                    stock: item.variant_id ? row.variant_stock : row.product_stock
+                });
+            }
+        } else {
+            // NORMAL CART FLOW
+            const cartRes = await client.query(
+                `
+                SELECT 
+                    c.id,
+                    c.user_id,
+                    c.product_id,
+                    c.variant_id,
+                    c.total_quantity,
+                    c.amount,
+    
+                    p.title,
+                    p.description,
+                    p.base_price,
+                    p.brand,
+                    p.category,
+                    p.tag,
+                    p.image_url,
+                    p.seller_id,
+                    p.stock as product_stock,
+    
+                    v.color AS variant_color,
+                    v.size AS variant_size,
+                    v.final_price,
+                    v.stock as variant_stock
+                FROM public.cart c
+                INNER JOIN public.products p 
+                    ON p.id = c.product_id
+                LEFT JOIN public.product_variants v
+                    ON v.id = c.variant_id
+                WHERE c.user_id = $1
+                ORDER BY c.created_time ASC
+                `,
+                [user_id]
+            );
+
+            if (cartRes.rows.length === 0) {
+                throw new Error("Cart is empty");
+            }
+            cartItems = cartRes.rows.map(row => ({
+                ...row,
+                stock: row.variant_id ? row.variant_stock : row.product_stock
+            }));
         }
-
-        const cartItems = cartRes.rows;
 
         const addressRes = await client.query(
             `
@@ -133,8 +249,9 @@ exports.createOrderFromCart = async ({
             total_quantity += quantity;
 
             // stock validation
-            if (item.variant_id && item.stock !== null && item.stock !== undefined) {
-                if (quantity > Number(item.stock)) {
+            const availableStock = item.stock;
+            if (availableStock !== null && availableStock !== undefined) {
+                if (quantity > Number(availableStock)) {
                     throw new Error(`Insufficient stock for product: ${item.title}`);
                 }
             }
@@ -342,18 +459,20 @@ exports.createOrderFromCart = async ({
             ]
         );
 
-        // 10. DEDUCT STOCK (Atomic) - REMOVED FROM CREATION
-        // Stock is now ONLY deducted after successful payment (Razorpay) 
-        // or order confirmation (COD). This prevents overselling and stock locking.
         console.log("Order created. Stock validation passed. Deduction deferred to payment/confirmation.");
 
 
-        await client.query(
-            `DELETE FROM public.cart WHERE user_id = $1`,
-            [user_id]
-        );
+        if (!items || items.length === 0) {
+            await client.query(
+                `DELETE FROM public.cart WHERE user_id = $1`,
+                [user_id]
+            );
+        }
 
         await client.query("COMMIT");
+
+        // TRIGGER NOTIFICATIONS
+        notificationTriggers.onOrderCreated(order.id, user_id).catch(console.error);
 
         return {
             order,
@@ -681,6 +800,8 @@ exports.getOrderItems = async (order_id) => {
             p.length,
             p.width,
             p.height,
+            p.seller_id,
+            EXISTS(SELECT 1 FROM public.reviews r WHERE r.order_id = oi.order_id AND r.product_id = oi.product_id) as is_reviewed,
             json_build_object(
                 'single', json_build_object(
                     'length', COALESCE(p.length, 0),
@@ -754,7 +875,7 @@ exports.updateOrderStatus = async (order_id, order_status, modified_by = null) =
         // If status changing to confirmed and it's COD/Unpaid, deduct stock now
         if (order_status === "confirmed" && order.order_status !== "confirmed") {
             const itemsRes = await client.query("SELECT * FROM public.order_items WHERE order_id = $1", [order_id]);
-            
+
             for (const item of itemsRes.rows) {
                 const quantity = Number(item.quantity || 0);
                 if (item.variant_id) {
@@ -774,6 +895,12 @@ exports.updateOrderStatus = async (order_id, order_status, modified_by = null) =
                     );
                     if (pRes.rows.length === 0) throw new Error(`Insufficient stock for product: ${item.product_title}`);
                 }
+
+                // Increment sold quantity
+                await client.query(
+                    `UPDATE public.products SET sold = COALESCE(sold, 0) + $1, modified_time = NOW() WHERE id = $2`,
+                    [quantity, item.product_id]
+                );
             }
         }
 
@@ -783,6 +910,18 @@ exports.updateOrderStatus = async (order_id, order_status, modified_by = null) =
         );
 
         await client.query("COMMIT");
+
+        // TRIGGER NOTIFICATION
+        notificationTriggers.onOrderStatusUpdated(order_id, order_status).catch(console.error);
+
+        // TRIGGER LOW STOCK CHECK IF DEDUCTED
+        if (order_status === "confirmed" && order.order_status !== "confirmed") {
+            const itemsRes = await pool.query("SELECT product_id, variant_id FROM public.order_items WHERE order_id = $1", [order_id]);
+            for (const item of itemsRes.rows) {
+                notificationTriggers.checkLowStock(item.product_id, item.variant_id).catch(console.error);
+            }
+        }
+
         return res.rows[0];
     } catch (err) {
         await client.query("ROLLBACK");
@@ -854,6 +993,20 @@ exports.verifyOrderPayment = async ({
 
         const order = orderRes.rows[0];
 
+        if (order.payment_status === 'paid') {
+            await client.query("COMMIT");
+            return {
+                success: true,
+                message: "Payment already verified",
+                data: {
+                    order_id: order.id,
+                    payment_status: order.payment_status,
+                    order_status: order.order_status,
+                    razorpay_payment_id: order.razorpay_payment_id
+                }
+            };
+        }
+
         await client.query(
             `
             UPDATE public.orders
@@ -886,8 +1039,6 @@ exports.verifyOrderPayment = async ({
             [order_id]
         );
 
-        // 6. DEDUCT STOCK (Atomic)
-        // Since we moved deduction here for Razorpay, we execute it now.
         for (const item of itemsRes.rows) {
             const quantity = Number(item.quantity || 0);
             if (item.variant_id) {
@@ -899,7 +1050,7 @@ exports.verifyOrderPayment = async ({
                     [quantity, item.variant_id]
                 );
                 if (vRes.rows.length === 0) throw new Error(`Insufficient stock for variant: ${item.product_title}`);
-                
+
                 await client.query(
                     `UPDATE public.products
                      SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1),
@@ -917,9 +1068,20 @@ exports.verifyOrderPayment = async ({
                 );
                 if (pRes.rows.length === 0) throw new Error(`Insufficient stock for product: ${item.product_title}`);
             }
+            console.log("quantity, item.product_id", quantity, item.product_id)
+            await client.query(
+                `UPDATE public.products SET sold = COALESCE(sold, 0) + $1, modified_time = NOW() WHERE id = $2`,
+                [quantity, item.product_id]
+            );
         }
 
         await client.query("COMMIT");
+
+        // TRIGGER NOTIFICATIONS
+        notificationTriggers.onPaymentSuccessful(order.id).catch(console.error);
+        for (const item of itemsRes.rows) {
+            notificationTriggers.checkLowStock(item.product_id, item.variant_id).catch(console.error);
+        }
 
         return {
             success: true,
@@ -958,6 +1120,9 @@ exports.cancelOrder = async (order_id, modified_by = null) => {
     if (res.rows.length === 0) {
         throw new Error("Order not found");
     }
+
+    // TRIGGER NOTIFICATION
+    notificationTriggers.onOrderStatusUpdated(order_id, 'cancelled').catch(console.error);
 
     return res.rows[0];
 };

@@ -15,13 +15,7 @@ router.post(
 );
 
 
-function rawBody(req, res, buf) {
-    req.rawBody = buf.toString();
-}
-
-
 router.post('/create-order', controller.createRazorpayOrder);
 router.post('/verify', controller.verifyPayment);
-router.post('/webhook', express.json({ verify: rawBody }), controller.handleWebhook);
 
 module.exports = router;

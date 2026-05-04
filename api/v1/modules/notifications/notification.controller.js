@@ -33,46 +33,10 @@ exports.getMyNotifications = async (req, res) => {
     }
 };
 
-exports.getUserNotifications = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const data = await notificationService.getNotificationsByUser(userId, req.query);
-
-        return res.json({
-            success: true,
-            data
-        });
-    } catch (error) {
-        console.error("getUserNotifications error:", error);
-        return res.status(500).json({
-            success: false,
-            error: error.message || "Internal Server Error"
-        });
-    }
-};
-
-exports.getSellerNotifications = async (req, res) => {
-    try {
-        const { sellerId } = req.params;
-        const data = await notificationService.getNotificationsBySeller(sellerId, req.query);
-
-        return res.json({
-            success: true,
-            data
-        });
-    } catch (error) {
-        console.error("getSellerNotifications error:", error);
-        return res.status(500).json({
-            success: false,
-            error: error.message || "Internal Server Error"
-        });
-    }
-};
-
 exports.getUnreadCount = async (req, res) => {
     try {
-        const { userId } = req.params;
-        const data = await notificationService.getUnreadCountByUser(userId);
+        const userId = req.user.id;
+        const data = await notificationService.getUnreadCountByReceiver(userId);
 
         return res.json({
             success: true,
@@ -89,7 +53,8 @@ exports.getUnreadCount = async (req, res) => {
 
 exports.markAsRead = async (req, res) => {
     try {
-        const { notificationId, userId } = req.params;
+        const { notificationId } = req.params;
+        const userId = req.user.id;
         const data = await notificationService.markAsRead(notificationId, userId);
 
         return res.json({
@@ -107,7 +72,7 @@ exports.markAsRead = async (req, res) => {
 
 exports.markAllAsRead = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user.id;
         const data = await notificationService.markAllAsRead(userId);
 
         return res.json({
@@ -125,7 +90,8 @@ exports.markAllAsRead = async (req, res) => {
 
 exports.deleteNotification = async (req, res) => {
     try {
-        const { notificationId, userId } = req.params;
+        const { notificationId } = req.params;
+        const userId = req.user.id;
         const data = await notificationService.deleteNotification(notificationId, userId);
 
         return res.json({

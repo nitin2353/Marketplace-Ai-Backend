@@ -17,6 +17,7 @@ const report = require('../api/v1/modules/report')
 const notification = require("../api/v1/modules/notifications");
 const review = require('../api/v1/modules/review');
 const user = require('../api/v1/modules/user');
+const chat = require('../api/v1/modules/chat');
 
 router.use('/requirement', requirement)
     .use('/quote', quote)
@@ -33,7 +34,8 @@ router.use('/requirement', requirement)
     .use('/report', report)
     .use('/review', review)
     .use("/notification", notification)
-    .use('/user', user);
+    .use('/user', user)
+    .use('/chat', chat);
 
 
 module.exports = router;

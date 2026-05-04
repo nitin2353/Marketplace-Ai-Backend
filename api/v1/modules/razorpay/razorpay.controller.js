@@ -1,6 +1,7 @@
 const razorpayService = require('./razorpay.modal');
 const crypto = require('crypto');
 const paymentService = require('../payments/payment.modal');
+const pool = require('../../../../config/database');
 
 exports.createRazorpayOrder = async (req, res) => {
     try {
@@ -85,8 +86,8 @@ exports.handleWebhook = async (req, res) => {
             const amount = paymentEntity.amount / 100;
 
             // 🔥 Duplicate check
-            const existing = await db.query(
-                `SELECT * FROM payments WHERE order_id = $1`,
+            const existing = await pool.query(
+                `SELECT * FROM public.payments WHERE order_id = $1`,
                 [order_id]
             );
 
@@ -100,16 +101,16 @@ exports.handleWebhook = async (req, res) => {
             const seller_amount = amount - platform_fee;
 
             // 💾 Save payment
-            await db.query(
-                `INSERT INTO payments 
-                (order_id, amount, payment_method, platform_fee, seller_amount, status)
-                VALUES ($1, $2, $3, $4, $5, 'paid')`,
-                [order_id, amount, "razorpay", platform_fee, seller_amount]
+            await pool.query(
+                `INSERT INTO public.payments 
+                (order_id, amount, payment_method, status)
+                VALUES ($1, $2, $3, 'paid')`,
+                [order_id, amount, "razorpay"]
             );
 
             // 📦 Update order
-            await db.query(
-                `UPDATE orders SET status = 'confirmed' WHERE id = $1`,
+            await pool.query(
+                `UPDATE public.orders SET payment_status = 'paid', order_status = 'confirmed' WHERE id = $1`,
                 [order_id]
             );
 

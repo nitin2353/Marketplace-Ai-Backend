@@ -1,6 +1,7 @@
 const pool = require("../../../../config/database");
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
+const notificationTriggers = require("../notifications/notification.trigger");
 
 const razorpay = new Razorpay({
     key_id: 'rzp_test_SZiKye10gyvfN1',
@@ -13,46 +14,84 @@ const generateOrderNumber = () => {
     return `ORD-${timestamp}-${random}`;
 };
 
-const calculateCartTotals = async (client, user_id, discount_percentage = 0) => {
-    const cartRes = await client.query(
-        `
-        SELECT 
-            c.id AS cart_id,
-            c.user_id,
-            c.product_id,
-            c.variant_id,
-            c.total_quantity,
-            c.amount,
+const calculateCartTotals = async (client, user_id, discount_percentage = 0, items = null) => {
+    let cartItems = [];
 
-            p.title,
-            p.description,
-            p.base_price,
-            p.brand,
-            p.category,
-            p.tag,
-            p.image_url,
-            p.seller_id,
+    if (items && items.length > 0) {
+        // BUY NOW FLOW
+        for (const item of items) {
+            const productRes = await client.query(
+                `
+                SELECT 
+                    p.id AS product_id, p.title, p.description, p.base_price, p.brand, 
+                    p.category, p.tag, p.image_url, p.seller_id, p.stock AS product_stock,
+                    v.id AS variant_id, v.color AS variant_color, v.size AS variant_size, 
+                    v.final_price, v.stock AS variant_stock
+                FROM public.products p
+                LEFT JOIN public.product_variants v ON v.id = $2
+                WHERE p.id = $1
+                `,
+                [item.product_id, item.variant_id]
+            );
 
-            v.color AS variant_color,
-            v.size AS variant_size,
-            v.final_price,
-            v.stock
-        FROM public.cart c
-        INNER JOIN public.products p
-            ON p.id = c.product_id
-        LEFT JOIN public.product_variants v
-            ON v.id = c.variant_id
-        WHERE c.user_id = $1
-        ORDER BY c.created_time ASC
-        `,
-        [user_id]
-    );
+            if (productRes.rows.length === 0) {
+                throw new Error(`Product not found: ${item.product_id}`);
+            }
 
-    if (cartRes.rows.length === 0) {
-        throw new Error("Cart is empty");
+            const row = productRes.rows[0];
+            cartItems.push({
+                ...row,
+                total_quantity: item.quantity,
+                variant_id: item.variant_id || null,
+                stock: item.variant_id ? row.variant_stock : row.product_stock
+            });
+        }
+    } else {
+        // NORMAL CART FLOW
+        const cartRes = await client.query(
+            `
+            SELECT 
+                c.id AS cart_id,
+                c.user_id,
+                c.product_id,
+                c.variant_id,
+                c.total_quantity,
+                c.amount,
+    
+                p.title,
+                p.description,
+                p.base_price,
+                p.brand,
+                p.category,
+                p.tag,
+                p.image_url,
+                p.seller_id,
+                p.stock AS product_stock,
+    
+                v.color AS variant_color,
+                v.size AS variant_size,
+                v.final_price,
+                v.stock AS variant_stock
+            FROM public.cart c
+            INNER JOIN public.products p
+                ON p.id = c.product_id
+            LEFT JOIN public.product_variants v
+                ON v.id = c.variant_id
+            WHERE c.user_id = $1
+            ORDER BY c.created_time ASC
+            `,
+            [user_id]
+        );
+
+        if (cartRes.rows.length === 0) {
+            throw new Error("Cart is empty");
+        }
+
+        cartItems = cartRes.rows.map(row => ({
+            ...row,
+            stock: row.variant_id ? row.variant_stock : row.product_stock
+        }));
     }
-
-    const cartItems = cartRes.rows;
 
     let subtotal = 0;
     let total_quantity = 0;
@@ -64,8 +103,9 @@ const calculateCartTotals = async (client, user_id, discount_percentage = 0) => 
             ? Number(item.final_price || 0)
             : Number(item.base_price || 0);
 
-        if (item.variant_id && item.stock !== null && item.stock !== undefined) {
-            if (quantity > Number(item.stock)) {
+        const availableStock = item.stock;
+        if (availableStock !== null && availableStock !== undefined) {
+            if (quantity > Number(availableStock)) {
                 throw new Error(`Insufficient stock for product: ${item.title}`);
             }
         }
@@ -103,7 +143,7 @@ exports.createRazorpayOrder = async ({
     notes = null
 }) => {
 
-  
+
 
 
     const client = await pool.connect();
@@ -176,7 +216,8 @@ exports.verifyAndCreateOrder = async ({
     delivery_charge = 0,
     notes = null,
     created_by = null,
-    modified_by = null
+    modified_by = null,
+    cart_items = null // Added for Buy Now
 }) => {
     const expectedSignature = crypto
         .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
@@ -254,7 +295,7 @@ exports.verifyAndCreateOrder = async ({
 
         const user = userRes.rows[0];
 
-        const totals = await calculateCartTotals(client, user_id, discount_percentage);
+        const totals = await calculateCartTotals(client, user_id, discount_percentage, cart_items);
         const {
             cartItems,
             total_quantity,
@@ -389,12 +430,12 @@ exports.verifyAndCreateOrder = async ({
                     `,
                     [quantity, item.variant_id]
                 );
-            }else{
-
-               const data = await client.query(
+            } else {
+                const data = await client.query(
                     `
                     UPDATE public.products
                     SET stock = stock - $1,
+                        sold = sold + $1,
                         modified_time = NOW()
                     WHERE id = $2
                     `,
@@ -466,12 +507,21 @@ exports.verifyAndCreateOrder = async ({
             ]
         );
 
-        await client.query(
-            `DELETE FROM public.cart WHERE user_id = $1`,
-            [user_id]
-        );
+        if (!cart_items || cart_items.length === 0) {
+            await client.query(
+                `DELETE FROM public.cart WHERE user_id = $1`,
+                [user_id]
+            );
+        }
 
         await client.query("COMMIT");
+
+        // TRIGGER NOTIFICATIONS
+        notificationTriggers.onOrderCreated(order.id, user_id).catch(console.error);
+        notificationTriggers.onPaymentSuccessful(order.id).catch(console.error);
+        for (const item of cartItems) {
+            notificationTriggers.checkLowStock(item.product_id, item.variant_id).catch(console.error);
+        }
 
         return {
             order_id: order.id,

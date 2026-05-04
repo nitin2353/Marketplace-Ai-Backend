@@ -1,8 +1,19 @@
 const reviewService = require("./review.service");
+const notificationTriggers = require("../notifications/notification.trigger");
+const UTILS = require('../../../../utils/global');
 
 exports.createReview = async (req, res) => {
     try {
-        const data = await reviewService.createReview(req.body, req);
+        let imageUrls = [];
+        if (req.files && req.files.length > 0) {
+            const uploadResults = await UTILS.uploadMultiple(req.files);
+            imageUrls = uploadResults.map(file => file.url);
+        }
+
+        const payload = { ...req.body, images: imageUrls };
+        const data = await reviewService.createReview(payload, req);
+
+        notificationTriggers.onReviewCreated(data.id).catch(console.error);
 
         return res.status(201).json({
             success: true,
@@ -107,10 +118,9 @@ exports.updateReview = async (req, res) => {
     try {
         const data = await reviewService.updateReview({
             reviewId: req.params.reviewId,
-            userId: req.body.user_id,
             rating: req.body.rating,
             comment: req.body.comment
-        });
+        }, req);
 
         return res.json({
             success: true,
@@ -130,7 +140,7 @@ exports.deleteReview = async (req, res) => {
     try {
         const data = await reviewService.deleteReview(
             req.params.reviewId,
-            req.params.userId
+            req.user.id
         );
 
         return res.json({
@@ -140,6 +150,51 @@ exports.deleteReview = async (req, res) => {
         });
     } catch (error) {
         console.error("deleteReview error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.updateSellerReply = async (req, res) => {
+    try {
+        const data = await reviewService.updateSellerReply({
+            reviewId: req.params.reviewId,
+            reply: req.body.reply
+        }, req);
+
+        // TRIGGER NOTIFICATION
+        notificationTriggers.onReviewReplied(req.params.reviewId).catch(console.error);
+
+        return res.json({
+            success: true,
+            message: "Reply updated successfully",
+            data
+        });
+    } catch (error) {
+        console.error("updateSellerReply error:", error);
+        return res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.deleteSellerReply = async (req, res) => {
+    try {
+        const data = await reviewService.deleteSellerReply(
+            req.params.reviewId,
+            req
+        );
+
+        return res.json({
+            success: true,
+            message: "Reply deleted successfully",
+            data
+        });
+    } catch (error) {
+        console.error("deleteSellerReply error:", error);
         return res.status(400).json({
             success: false,
             message: error.message

@@ -52,8 +52,7 @@ const getAllProducts = async (role = "customer", id = "") => {
                     ) AS variants
                 FROM products p
                 INNER JOIN users u ON u.id = p.seller_id
-                LEFT JOIN product_variants v ON v.product_id = p.id
-                WHERE u.status = 'active' AND (p.status = 'true' OR p.status IS NULL)
+                LEFT JOIN product_variants v ON v.product_id = p.id\
                 GROUP BY p.id
                 ORDER BY p.created_at DESC;
             `;
@@ -358,7 +357,7 @@ const createProduct = async (data) => {
         }
 
         await client.query("COMMIT");
-        
+
         const finalProductRes = await pool.query(
             "SELECT p.*, COALESCE(json_agg(v.*) FILTER (WHERE v.id IS NOT NULL), '[]') as variants FROM products p LEFT JOIN product_variants v ON v.product_id = p.id WHERE p.id = $1 GROUP BY p.id",
             [product.id]
@@ -585,6 +584,92 @@ const handleFindListByQueryModel = async ({ q, limit, offset }) => {
 
 
 
+const getCategorySections = async () => {
+    try {
+        const sections = [];
+
+        // Common filter: Active product and Active seller
+        const baseQuery = `
+            SELECT 
+                p.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', v.id,
+                            'color', v.color,
+                            'size', v.size,
+                            'price', v.final_price,
+                            'stock', v.stock,
+                            'old_price', v.old_price
+                        )
+                    ) FILTER (WHERE v.id IS NOT NULL),
+                    '[]'
+                ) AS variants
+            FROM products p
+            INNER JOIN users u ON u.id = p.seller_id
+            LEFT JOIN product_variants v ON v.product_id = p.id
+            WHERE (p.status = 'active' OR p.status = 'true' OR p.status = '1') AND u.status = 'active'
+        `;
+
+
+        const groupBy = ` GROUP BY p.id `;
+
+        // 1. New Arrivals
+        const newArrivals = await pool.query(`${baseQuery} ${groupBy} ORDER BY p.created_at DESC LIMIT 12`);
+        sections.push({
+            section_key: "new_arrivals",
+            title: "New Arrivals",
+            products: normalizeProductRecords(newArrivals.rows)
+        });
+
+        // 2. Trending
+        const trending = await pool.query(`${baseQuery} ${groupBy} ORDER BY p.sold DESC LIMIT 12`);
+        sections.push({
+            section_key: "trending",
+            title: "Trending Products",
+            products: normalizeProductRecords(trending.rows)
+        });
+
+        // 3. On Sale
+        const onSale = await pool.query(`${baseQuery} AND p.discount > 0 ${groupBy} ORDER BY p.discount DESC LIMIT 12`);
+        sections.push({
+            section_key: "on_sale",
+            title: "Great Deals & Discounts",
+            products: normalizeProductRecords(onSale.rows)
+        });
+
+        // 4. Top Rated
+        const topRated = await pool.query(`${baseQuery} ${groupBy} ORDER BY p.rating DESC, p.review_count DESC LIMIT 12`);
+        sections.push({
+            section_key: "top_rated",
+            title: "Top Rated Products",
+            products: normalizeProductRecords(topRated.rows)
+        });
+
+        // 5. Category-wise sections
+        const categoriesRes = await pool.query(`SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND (status = 'active' OR status = 'true' OR status = '1')`);
+
+        const categories = categoriesRes.rows.map(r => r.category);
+
+        for (const cat of categories) {
+            const catProducts = await pool.query(`${baseQuery} AND p.category = $1 ${groupBy} LIMIT 12`, [cat]);
+            if (catProducts.rows.length > 0) {
+                sections.push({
+                    section_key: `category_${cat.toLowerCase().replace(/\s+/g, '_')}`,
+                    title: cat,
+                    category: cat,
+                    products: normalizeProductRecords(catProducts.rows)
+                });
+            }
+        }
+
+        return sections;
+    } catch (error) {
+        console.error("Error fetching category sections:", error.message);
+        throw error;
+    }
+};
+
 module.exports = {
     getAllProducts,
     getProductById,
@@ -593,5 +678,6 @@ module.exports = {
     modelHandleUpdateProduct,
     deleteById,
     handleFindByQueryModel,
-    handleFindListByQueryModel
-};
+    handleFindListByQueryModel,
+    getCategorySections
+};

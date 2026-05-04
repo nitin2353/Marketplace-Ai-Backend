@@ -6,6 +6,7 @@ const authMiddleware = require("../middlewares/index");
 
 // Create order
 router.post("/", authMiddleware, controller.createOrder);
+router.post("/buy-now", authMiddleware, controller.buyNow);
 
 // Customer routes
 router.get("/customer/:user_id", authMiddleware, controller.getCustomerOrders);
