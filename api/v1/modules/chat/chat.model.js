@@ -43,29 +43,32 @@ exports.getMessagesByConversation = async (conversationId) => {
         SELECT m.*, u.name as sender_name
         FROM public.messages m
         INNER JOIN public.users u ON u.id = m.sender_id
-        WHERE m.conversation_id = $1
+        WHERE m.conversation_id = $1 AND m.is_deleted = false
         ORDER BY m.created_at ASC;
     `;
     const result = await pool.query(query, [conversationId]);
     return result.rows;
 };
 
-exports.createMessage = async (conversationId, senderId, message, attachmentUrl) => {
+exports.createMessage = async (conversationId, senderId, message, attachmentData = {}) => {
+    const { url, type, name, size } = attachmentData;
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         
         const messageQuery = `
-            INSERT INTO public.messages (conversation_id, sender_id, message, attachment_url)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO public.messages (conversation_id, sender_id, message, attachment_url, attachment_type, attachment_name, attachment_size)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *;
         `;
-        const messageResult = await client.query(messageQuery, [conversationId, senderId, message, attachmentUrl]);
+        const messageResult = await client.query(messageQuery, [conversationId, senderId, message, url, type, name, size]);
         
         const convRes = await client.query('SELECT customer_id, seller_id FROM public.conversations WHERE id = $1', [conversationId]);
         const conv = convRes.rows[0];
         
         let updateConvQuery;
+        const lastMsg = message || (url ? `Sent an attachment: ${name || 'file'}` : '');
+        
         if (senderId === conv.customer_id) {
             updateConvQuery = `
                 UPDATE public.conversations
@@ -80,7 +83,7 @@ exports.createMessage = async (conversationId, senderId, message, attachmentUrl)
             `;
         }
         
-        await client.query(updateConvQuery, [message, conversationId]);
+        await client.query(updateConvQuery, [lastMsg, conversationId]);
         
         await client.query('COMMIT');
         return messageResult.rows[0];
@@ -115,5 +118,17 @@ exports.markAsRead = async (conversationId, userId) => {
 exports.getConversationById = async (id) => {
     const query = `SELECT * FROM public.conversations WHERE id = $1`;
     const result = await pool.query(query, [id]);
+    return result.rows[0];
+};
+
+exports.getMessageById = async (messageId) => {
+    const query = `SELECT * FROM public.messages WHERE id = $1`;
+    const result = await pool.query(query, [messageId]);
+    return result.rows[0];
+};
+
+exports.deleteMessage = async (messageId) => {
+    const query = `UPDATE public.messages SET is_deleted = true WHERE id = $1 RETURNING *`;
+    const result = await pool.query(query, [messageId]);
     return result.rows[0];
 };

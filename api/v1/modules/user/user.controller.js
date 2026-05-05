@@ -62,11 +62,47 @@ exports.updatePayment = async (req, res) => {
     }
 };
 
+exports.getNotificationPreferences = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await userModel.findUserById(userId);
+        if (!user) return Response.notFound(res, "User not found");
+
+        const role = user.role;
+        const defaultPrefs = role === 'seller' ? {
+            new_order: true,
+            order_cancelled: true,
+            payment_received: true,
+            low_stock: true,
+            out_of_stock: true,
+            new_review: true,
+            chat_messages: true,
+            weekly_summary: false,
+            email_notifications: true,
+            sms_notifications: false
+        } : {
+            email_notifications: true,
+            sms_notifications: false,
+            order_updates: true,
+            promotional_emails: false,
+            weekly_digest: false,
+            chat_messages: true,
+            review_replies: true,
+            payment_updates: true
+        };
+
+        const prefs = { ...defaultPrefs, ...(user.notification_preferences || {}) };
+        return Response.success(res, "Notification preferences fetched successfully", prefs);
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
 exports.updateNotificationPreferences = async (req, res) => {
     try {
-        const { userId } = req.params;
+        const userId = req.user.id;
         const user = await userModel.updateNotificationPrefs(userId, req.body);
-        return Response.success(res, "Notification preferences updated successfully", user);
+        return Response.success(res, "Notification preferences updated successfully", user.notification_preferences);
     } catch (err) {
         return Response.serverError(res, err.message);
     }

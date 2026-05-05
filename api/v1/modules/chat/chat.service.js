@@ -1,5 +1,8 @@
+const pool = require("../../../../config/database");
 const chatModel = require("./chat.model");
 const notificationTrigger = require("../notifications/notification.trigger");
+const { uploadFromBuffer, removeMultiple } = require("../../../../utils/global");
+const cloudinary = require("../../../../config/cloudinary");
 
 exports.getOrCreateConversation = async (customerId, sellerId, productId) => {
     let conversation = await chatModel.findConversation(customerId, sellerId, productId);
@@ -41,7 +44,7 @@ exports.getMessages = async (conversationId, userId) => {
     return await chatModel.getMessagesByConversation(conversationId);
 };
 
-exports.sendMessage = async (conversationId, senderId, message, attachmentUrl) => {
+exports.sendMessage = async (conversationId, senderId, message, file) => {
     const conversation = await chatModel.getConversationById(conversationId);
     if (!conversation) {
         throw new Error("Conversation not found");
@@ -50,7 +53,22 @@ exports.sendMessage = async (conversationId, senderId, message, attachmentUrl) =
         throw new Error("Access denied");
     }
 
-    const newMessage = await chatModel.createMessage(conversationId, senderId, message, attachmentUrl);
+    // Get sender name for notification
+    const senderRes = await pool.query('SELECT name FROM public.users WHERE id = $1', [senderId]);
+    const senderName = senderRes.rows[0]?.name || 'Someone';
+
+    let attachmentData = {};
+    if (file) {
+        const uploadRes = await uploadFromBuffer(file.buffer, "chat_attachments");
+        attachmentData = {
+            url: uploadRes.url,
+            type: file.mimetype,
+            name: file.originalname,
+            size: file.size
+        };
+    }
+
+    const newMessage = await chatModel.createMessage(conversationId, senderId, message, attachmentData);
     
     const receiverId = conversation.customer_id === senderId ? conversation.seller_id : conversation.customer_id;
     const receiverType = conversation.customer_id === senderId ? 'seller' : 'customer';
@@ -59,14 +77,14 @@ exports.sendMessage = async (conversationId, senderId, message, attachmentUrl) =
     await notificationTrigger.triggerNotification({
         receiver_id: receiverId,
         receiver_type: receiverType,
-        type: 'NEW_CHAT_MESSAGE',
+        type: 'chat_message',
         title: 'New Message',
-        body: message ? (message.length > 50 ? message.substring(0, 47) + '...' : message) : 'You received an attachment',
+        body: `${senderName}: ${message ? (message.length > 50 ? message.substring(0, 47) + '...' : message) : 'Shared a file'}`,
         ref_type: 'conversation',
         ref_id: conversationId
     });
 
-    return newMessage;
+    return { ...newMessage, sender_name: senderName };
 };
 
 exports.markConversationRead = async (conversationId, userId) => {
@@ -78,4 +96,30 @@ exports.markConversationRead = async (conversationId, userId) => {
         throw new Error("Access denied");
     }
     return await chatModel.markAsRead(conversationId, userId);
+};
+
+exports.deleteMessage = async (messageId, userId) => {
+    const message = await chatModel.getMessageById(messageId);
+    if (!message) {
+        throw new Error("Message not found");
+    }
+    if (message.sender_id !== userId) {
+        throw new Error("You can only delete your own messages");
+    }
+
+    // Optional: Delete from Cloudinary
+    if (message.attachment_url) {
+        try {
+            // Extract public_id safely
+            const url = message.attachment_url;
+            const parts = url.split("/");
+            const fileName = parts.pop().split(".")[0];
+            const publicId = `chat_attachments/${fileName}`;
+            await cloudinary.uploader.destroy(publicId);
+        } catch (error) {
+            console.error("Error deleting from Cloudinary:", error);
+        }
+    }
+
+    return await chatModel.deleteMessage(messageId);
 };

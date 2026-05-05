@@ -8,6 +8,7 @@ router.get("/profile/:userId", authMiddleware, userController.getProfile);
 router.put("/profile/:userId", authMiddleware, upload.single("avatar"), userController.updateProfile);
 router.put("/store/:userId", authMiddleware, userController.updateStore);
 router.put("/payment/:userId", authMiddleware, userController.updatePayment);
-router.put("/notification-preferences/:userId", authMiddleware, userController.updateNotificationPreferences);
+router.get("/notification-preferences", authMiddleware, userController.getNotificationPreferences);
+router.put("/notification-preferences", authMiddleware, userController.updateNotificationPreferences);
 
 module.exports = router;
