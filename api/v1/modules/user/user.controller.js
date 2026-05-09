@@ -7,11 +7,6 @@ exports.getProfile = async (req, res) => {
         const user = await userModel.findUserById(userId);
         if (!user) return Response.notFound(res, "User not found");
 
-        // Mask account number for security
-        if (user.account_number) {
-            user.account_number = user.account_number.slice(0, 2) + "********" + user.account_number.slice(-4);
-        }
-
         return Response.success(res, "Profile fetched successfully", user);
     } catch (err) {
         return Response.serverError(res, err.message);
@@ -26,7 +21,7 @@ exports.updateProfile = async (req, res) => {
         if (req.file) {
             // If running on local, usually we return the relative path or full URL
             // Assuming environment provides a base URL or we just store filename
-            data.avatar = req.file.filename; 
+            data.avatar = req.file.filename;
         }
 
         const user = await userModel.updateProfile(userId, data);

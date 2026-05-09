@@ -68,8 +68,14 @@ exports.registerSeller = async (req, res) => {
     try {
         const { name, email, password, phone, business_name } = req.body;
 
-        if (!name || !email || !password) {
-            return Response.badRequest(res, "Name, Email & Password are required");
+        // Backend Validation
+        if (!email) return Response.badRequest(res, "Email is required");
+        if (!password) return Response.badRequest(res, "Password is required");
+        if (!phone) return Response.badRequest(res, "Phone number is required");
+        if (!business_name) return Response.badRequest(res, "Business name is required for sellers");
+        
+        if (!/^\d{10}$/.test(phone)) {
+            return Response.badRequest(res, "Phone number must be exactly 10 digits");
         }
 
         const existing = await authModel.findUserByEmail(email);
@@ -78,22 +84,29 @@ exports.registerSeller = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const nameParts = name.trim().split(" ");
-        const first_name = nameParts[0];
+        
+        // Extract names
+        const nameParts = (name || "").trim().split(" ");
+        const first_name = nameParts[0] || "Seller";
         const last_name = nameParts.slice(1).join(" ") || "";
 
         // Create unified user/seller record
-        const user = await authModel.createUser({
+        // Force security fields
+        const userData = {
             ...req.body,
-            name: name.trim(),
+            name: (name || "").trim() || `${first_name} ${last_name}`.trim(),
             first_name,
             last_name,
             password: hashedPassword,
-            role: "seller",
-            status: "active"
-        });
+            role: "seller", // Force role
+            status: "active", // Force status, do not take from req.body
+            notify: req.body.notify !== undefined ? req.body.notify : true,
+            notification_preferences: req.body.notification_preferences || {}
+        };
 
-        // Generate Token (Safe Payload)
+        const user = await authModel.createUser(userData);
+
+        // Generate Token (Safe Payload - NO PASSWORD)
         const token = jwt.sign(
             { id: user.id, role: user.role, email: user.email },
             process.env.JWT_SECRET_KEY,

@@ -13,6 +13,8 @@ exports.createOrder = async (req, res) => {
             payment_order_id,
             payment_id,
             payment_signature,
+            discount_amount,
+            discount_percentage,
             notes,
             cart_items // Added for Buy Now
         } = req.body;
@@ -60,6 +62,8 @@ exports.createOrder = async (req, res) => {
             payment_order_id,
             payment_id,
             payment_signature,
+            discount_amount,
+            discount_percentage,
             notes,
             created_by,
             modified_by,
@@ -189,10 +193,9 @@ exports.getSellerOrderById = async (req, res) => {
 exports.getOrderById = async (req, res) => {
     try {
         const { order_id } = req.params;
-        const user_id = req.user.id;
         
         // For security, customers can only see their own orders
-        const data = await orderService.getOrderById(order_id, user_id);
+        const data = await orderService.getOrderById(order_id);
         if (!data) {
             return res.status(404).json({
                 success: false,

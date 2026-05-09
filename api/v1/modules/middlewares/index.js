@@ -1,21 +1,21 @@
 const jwt = require("jsonwebtoken");
 const pool = require("../../../../config/database");
 
-module.exports = async (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader) {
             return res.status(401).json({ error: "No token provided" });
         }
-
+        
         const token = authHeader.startsWith("Bearer ")
-            ? authHeader.split(" ")[1]
+        ? authHeader.split(" ")[1]
             : authHeader;
-
+            
         if (!token) {
             return res.status(401).json({ error: "Invalid token format" });
         }
-
+        
         const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);
         
         const userRes = await pool.query("SELECT status FROM users WHERE id = $1", [decoded.id]);
@@ -26,9 +26,9 @@ module.exports = async (req, res, next) => {
         }
 
         if (user.status !== 'active') {
-            return res.status(403).json({ 
+            return res.status(403).json({
                 error: `Account is ${user.status}. Please contact support.`,
-                status: user.status 
+                status: user.status
             });
         }
 
@@ -48,3 +48,5 @@ module.exports = async (req, res, next) => {
         return res.status(401).json({ error: "Invalid token" });
     }
 };
+
+module.exports = authMiddleware;

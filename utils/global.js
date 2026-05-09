@@ -50,18 +50,23 @@ const extractPublicId = (url) => {
 
 
 const removeMultiple = async (urls = []) => {
-    if (!urls || urls.length === 0) {
-        return []; // no error, just skip
+    const safeUrls = normalizeProductImages(urls);
+
+    if (!safeUrls.length) {
+        return [];
     }
 
-    const deletePromises = urls.map(url => {
-        const publicId = extractPublicId(url);
-        return cloudinary.uploader.destroy(publicId);
-    });
+    const deletePromises = safeUrls
+        .map((url) => {
+            const publicId = extractPublicId(url);
+            if (!publicId) return null;
+
+            return cloudinary.uploader.destroy(publicId);
+        })
+        .filter(Boolean);
 
     return Promise.all(deletePromises);
 };
-
 
 const normalizeProductImages = (imageUrl) => {
     let parsedImages = [];
@@ -122,6 +127,11 @@ const normalizeProductRecords = (products = []) => {
     return products.map(normalizeProductRecord);
 };
 
+const parseBoolean = (value, def = false) => {
+    if (value === undefined || value === null || value === "") return def;
+    if (typeof value === "boolean") return value;
+    return value.toString().toLowerCase() === "true";
+};
 
 
 
@@ -133,4 +143,5 @@ module.exports = {
     normalizeProductImages,
     normalizeProductRecord,
     normalizeProductRecords,
+    parseBoolean,
 };

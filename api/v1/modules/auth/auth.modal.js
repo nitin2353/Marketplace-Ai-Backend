@@ -11,6 +11,9 @@ const createUser = async (data) => {
         last_name,
         phone,
         gender,
+        dob,
+        bio,
+        website,
         business_name,
         business_type,
         gstin,
@@ -27,33 +30,36 @@ const createUser = async (data) => {
         ifsc,
         account_type,
         upi_id,
+        notify = true,
+        notification_preferences = {},
         status = 'active'
     } = data;
 
     const query = `
         INSERT INTO public.users (
             name, email, password, role, first_name, last_name, phone, gender,
-            business_name, business_type, gstin, pan, store_description,
+            dob, bio, website, business_name, business_type, gstin, pan, store_description,
             address_line_1, city, state, pincode, country,
             bank_name, account_holder, account_number, ifsc, account_type, upi_id,
-            status
+            notify, notification_preferences, status
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8,
-            $9, $10, $11, $12, $13,
-            $14, $15, $16, $17, $18,
-            $19, $20, $21, $22, $23, $24,
-            $25
+            $9, $10, $11, $12, $13, $14, $15, $16,
+            $17, $18, $19, $20, $21,
+            $22, $23, $24, $25, $26, $27,
+            $28, $29, $30
         )
         RETURNING id, name, email, role, status;
     `;
 
     const values = [
-        name, email, password, role, first_name, last_name, phone, gender,
-        business_name || null, business_type || null, gstin || null, pan || null, store_description || null,
+        name, email, password, role, first_name, last_name, phone, gender || null,
+        dob || null, bio || null, website || null, business_name || null, business_type || null, 
+        gstin || null, pan || null, store_description || null,
         address_line_1 || null, city || null, state || null, pincode || null, country || null,
         bank_name || null, account_holder || null, account_number || null, ifsc || null, account_type || null, upi_id || null,
-        status
+        notify, JSON.stringify(notification_preferences), status
     ];
 
     const result = await pool.query(query, values);

@@ -1,18 +1,27 @@
 const pool = require("../../../../config/database");
 const chatModel = require("./chat.model");
+const { moderateChatMessage } = require("./chat.aiModerator");
 const notificationTrigger = require("../notifications/notification.trigger");
 const { uploadFromBuffer, removeMultiple } = require("../../../../utils/global");
 const cloudinary = require("../../../../config/cloudinary");
+
+
+const getSenderType = (conversation, senderId) => {
+    if (conversation.customer_id === senderId) return "customer";
+    if (conversation.seller_id === senderId) return "seller";
+    return "unknown";
+};
+
 
 exports.getOrCreateConversation = async (customerId, sellerId, productId) => {
     let conversation = await chatModel.findConversation(customerId, sellerId, productId);
     if (!conversation) {
         conversation = await chatModel.createConversation(customerId, sellerId, productId);
-        
-        
+
+
         // Trigger notification for new customization request
 
-        
+
 
         await notificationTrigger.triggerNotification({
             receiver_id: sellerId,
@@ -44,47 +53,104 @@ exports.getMessages = async (conversationId, userId) => {
     return await chatModel.getMessagesByConversation(conversationId);
 };
 
-exports.sendMessage = async (conversationId, senderId, message, file) => {
+exports.sendMessage = async (
+    conversationId,
+    senderId,
+    message,
+    file,
+    aiConfirmed = false
+) => {
     const conversation = await chatModel.getConversationById(conversationId);
+
     if (!conversation) {
         throw new Error("Conversation not found");
     }
+
     if (conversation.customer_id !== senderId && conversation.seller_id !== senderId) {
         throw new Error("Access denied");
     }
 
-    // Get sender name for notification
-    const senderRes = await pool.query('SELECT name FROM public.users WHERE id = $1', [senderId]);
+    const senderType = getSenderType(conversation, senderId);
+
+    if (message && message.trim()) {
+        const moderation = await moderateChatMessage({
+            message,
+            senderType,
+        });
+
+        if (moderation.blocked) {
+            const err = new Error(
+                moderation.message || "Contact details are not allowed in chat."
+            );
+            err.statusCode = 400;
+            err.moderation = moderation;
+            throw err;
+        }
+
+        if (moderation.warning && !aiConfirmed) {
+            const err = new Error(
+                moderation.message || "Please confirm before sending this message."
+            );
+            err.statusCode = 409;
+            err.moderation = moderation;
+            throw err;
+        }
+    }
+
+    const senderRes = await pool.query(
+        'SELECT name FROM public.users WHERE id = $1',
+        [senderId]
+    );
+
     const senderName = senderRes.rows[0]?.name || 'Someone';
 
     let attachmentData = {};
+
     if (file) {
         const uploadRes = await uploadFromBuffer(file.buffer, "chat_attachments");
+
         attachmentData = {
             url: uploadRes.url,
             type: file.mimetype,
             name: file.originalname,
-            size: file.size
+            size: file.size,
         };
     }
 
-    const newMessage = await chatModel.createMessage(conversationId, senderId, message, attachmentData);
-    
-    const receiverId = conversation.customer_id === senderId ? conversation.seller_id : conversation.customer_id;
-    const receiverType = conversation.customer_id === senderId ? 'seller' : 'customer';
+    const newMessage = await chatModel.createMessage(
+        conversationId,
+        senderId,
+        message,
+        attachmentData
+    );
 
-    // Trigger notification for new message
+    const receiverId =
+        conversation.customer_id === senderId
+            ? conversation.seller_id
+            : conversation.customer_id;
+
+    const receiverType =
+        conversation.customer_id === senderId ? 'seller' : 'customer';
+
     await notificationTrigger.triggerNotification({
         receiver_id: receiverId,
         receiver_type: receiverType,
         type: 'chat_message',
         title: 'New Message',
-        body: `${senderName}: ${message ? (message.length > 50 ? message.substring(0, 47) + '...' : message) : 'Shared a file'}`,
+        body: `${senderName}: ${message
+            ? message.length > 50
+                ? message.substring(0, 47) + '...'
+                : message
+            : 'Shared a file'
+            }`,
         ref_type: 'conversation',
-        ref_id: conversationId
+        ref_id: conversationId,
     });
 
-    return { ...newMessage, sender_name: senderName };
+    return {
+        ...newMessage,
+        sender_name: senderName,
+    };
 };
 
 exports.markConversationRead = async (conversationId, userId) => {
@@ -122,4 +188,24 @@ exports.deleteMessage = async (messageId, userId) => {
     }
 
     return await chatModel.deleteMessage(messageId);
+};
+
+
+exports.moderateMessageBeforeSend = async (conversationId, senderId, message) => {
+    const conversation = await chatModel.getConversationById(conversationId);
+
+    if (!conversation) {
+        throw new Error("Conversation not found");
+    }
+
+    if (conversation.customer_id !== senderId && conversation.seller_id !== senderId) {
+        throw new Error("Access denied");
+    }
+
+    const senderType = getSenderType(conversation, senderId);
+
+    return await moderateChatMessage({
+        message,
+        senderType,
+    });
 };

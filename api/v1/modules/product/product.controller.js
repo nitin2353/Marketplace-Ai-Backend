@@ -2,6 +2,7 @@ const productModel = require("./product.model");
 const Response = require("../response");
 const UTILS = require('../../../../utils/global');
 const pool = require('../../../../config/database');
+const { parseBoolean } = require("../../../../utils/global");
 
 
 
@@ -174,12 +175,6 @@ const updateProduct = async (req, res) => {
             }
         };
 
-        const parseBoolean = (value, def = false) => {
-            if (value === undefined || value === null || value === "") return def;
-            if (typeof value === "boolean") return value;
-            return value.toString().toLowerCase() === "true";
-        };
-
         const parseNumber = (value, def = null) => {
             if (value === undefined || value === null || value === "") return def;
             const num = Number(value);
@@ -270,7 +265,7 @@ const updateProduct = async (req, res) => {
 
             variants: safeParse(req.body.variants, []),
         };
-        
+
 
 
         const result = await productModel.modelHandleUpdateProduct(payload);
@@ -297,7 +292,6 @@ const handleDeleteProduct = async (req, res) => {
             return Response.badRequest(res, "Product ID is required");
         }
 
-        // 🔥 STEP 1: get product
         const query = `SELECT * FROM public.products WHERE id = $1`;
         const response = await pool.query(query, [id]);
 
@@ -307,15 +301,12 @@ const handleDeleteProduct = async (req, res) => {
             return Response.badRequest(res, "Product not found");
         }
 
-        const deletableUrls = product.image_url || [];
+        const deletableUrls = UTILS.normalizeProductImages(product.image_url);
 
-
-        // 🔥 STEP 2: delete images from Cloudinary
         if (deletableUrls.length > 0) {
             await UTILS.removeMultiple(deletableUrls);
         }
 
-        // 🔥 STEP 3: delete from DB
         const deletedRecord = await productModel.deleteById(id);
 
         return Response.success(res, "Product deleted successfully", deletedRecord);
@@ -345,4 +336,4 @@ module.exports = {
     handleDeleteProduct,
     handleFindListByQuery,
     handleGetCategorySections
-};
+};

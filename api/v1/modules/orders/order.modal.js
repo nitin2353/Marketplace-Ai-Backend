@@ -96,6 +96,8 @@ exports.createOrderFromCart = async ({
     created_by = null,
     modified_by = null,
     payment_order_id,
+    discount_percentage = 0,
+    discount_amount = 0,
     payment_id,
     payment_signature,
     items = null // Added for Buy Now
@@ -258,7 +260,6 @@ exports.createOrderFromCart = async ({
         }
 
         const delivery_charge = 0;
-        const discount_amount = 0;
         const tax_amount = 0;
         const total_amount = subtotal + delivery_charge + tax_amount - discount_amount;
 
@@ -292,6 +293,7 @@ exports.createOrderFromCart = async ({
                 payment_method,
                 payment_status,
                 payment_gateway,
+                discount_percentage,
                 razorpay_order_id,
                 razorpay_payment_id,
                 razorpay_signature,
@@ -306,7 +308,7 @@ exports.createOrderFromCart = async ({
                 $1, $2, $3, $4, $5,
                 $6, $7, $8, $9, $10,
                 $11, $12, $13, $14, $15,
-                $16, $17, $18, $19, $20, NOW(), NOW()
+                $16, $17, $18, $19, $20, $21, NOW(), NOW()
             )
             RETURNING *
             `,
@@ -324,6 +326,7 @@ exports.createOrderFromCart = async ({
                 payment_method,
                 payment_status,
                 payment_gateway,
+                discount_percentage,
                 payment_order_id,
                 payment_id,
                 payment_signature,
@@ -582,33 +585,55 @@ exports.getCustomerOrderById = async (user_id, order_id) => {
 exports.getSellerOrders = async (seller_id) => {
     const res = await pool.query(
         `
-    SELECT DISTINCT 
-        o.*
-    FROM public.orders o
-    INNER JOIN public.order_items oi
-        ON oi.order_id = o.id
-    INNER JOIN public.products p
-        ON p.id = oi.product_id
-    INNER JOIN public.users u ON u.id = p.seller_id
-    WHERE p.seller_id = $1 AND u.status = 'active'
-    ORDER BY o.created_time DESC
-    `,
+        SELECT DISTINCT 
+            o.*
+        FROM public.orders o
+        INNER JOIN public.order_items oi ON oi.order_id = o.id
+        INNER JOIN public.products p ON p.id = oi.product_id
+        INNER JOIN public.users u ON u.id = p.seller_id
+        WHERE p.seller_id = $1 
+          AND u.status = 'active'
+        ORDER BY o.created_time DESC
+        `,
         [seller_id]
     );
 
     const orders = res.rows;
+
     for (const order of orders) {
         const itemsRes = await pool.query(
             `
-            SELECT oi.*
+            SELECT 
+                oi.*,
+                p.seller_id,
+                u.name AS seller_name,
+                u.email AS seller_email,
+                u.phone AS seller_phone,
+                u.business_name AS seller_business_name
             FROM public.order_items oi
             INNER JOIN public.products p ON p.id = oi.product_id
-            WHERE oi.order_id = $1 AND p.seller_id = $2
+            INNER JOIN public.users u ON u.id = p.seller_id
+            WHERE oi.order_id = $1 
+              AND p.seller_id = $2
+              AND u.status = 'active'
             ORDER BY oi.created_time ASC
             `,
             [order.id, seller_id]
         );
+
         order.items = itemsRes.rows;
+
+        const sellerInfo = await pool.query(
+            `
+            SELECT 
+                *
+            FROM public.users u
+            WHERE id = $1
+            `,
+            [seller_id]
+        );
+
+        order.seller_info = sellerInfo.rows[0] || null;
 
         const addressRes = await pool.query(
             `SELECT * FROM public.order_address_snapshot WHERE order_id = $1`,
@@ -690,14 +715,14 @@ exports.getSellerOrderById = async (seller_id, order_id) => {
     };
 };
 
-exports.getOrderById = async (order_id, user_id) => {
+exports.getOrderById = async (order_id) => {
+
     const orderRes = await pool.query(
         `
         SELECT *
         FROM public.orders
-        WHERE id = $1 AND user_id = $2
-        `,
-        [order_id, user_id]
+        WHERE id = $1`,
+        [order_id]
     );
 
     if (orderRes.rows.length === 0) {

@@ -4,7 +4,7 @@ exports.getOrCreateConversation = async (req, res) => {
     try {
         const { seller_id, product_id } = req.body;
         const customer_id = req.user.id;
-        
+
         if (!seller_id) {
             return res.status(400).json({ status: false, message: "Seller ID is required" });
         }
@@ -40,36 +40,64 @@ exports.getMessages = async (req, res) => {
 exports.sendMessage = async (req, res) => {
     try {
         const { id } = req.params;
-        const { message } = req.body;
+        const { message, aiConfirmed } = req.body;
         const senderId = req.user.id;
         const file = req.file;
 
         if (!message && !file) {
-            return res.status(400).json({ status: false, message: "Message or attachment is required" });
+            return res.status(400).json({
+                status: false,
+                message: "Message or attachment is required",
+            });
         }
 
-        // Validate file type if exists
         if (file) {
             const allowedTypes = [
-                'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+                'image/jpeg',
+                'image/png',
+                'image/gif',
+                'image/webp',
                 'application/pdf',
-                'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain'
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain',
             ];
+
             if (!allowedTypes.includes(file.mimetype)) {
-                return res.status(400).json({ status: false, message: "Invalid file type. Allowed: images, pdf, doc/docx, txt" });
+                return res.status(400).json({
+                    status: false,
+                    message: "Invalid file type. Allowed: images, pdf, doc/docx, txt",
+                });
             }
-            
-            // 10MB limit
+
             if (file.size > 10 * 1024 * 1024) {
-                return res.status(400).json({ status: false, message: "File size exceeds 10MB limit" });
+                return res.status(400).json({
+                    status: false,
+                    message: "File size exceeds 10MB limit",
+                });
             }
         }
 
-        const newMessage = await chatService.sendMessage(id, senderId, message, file);
-        res.status(201).json({ status: true, data: newMessage });
+        const newMessage = await chatService.sendMessage(
+            id,
+            senderId,
+            message,
+            file,
+            aiConfirmed === "true" || aiConfirmed === true
+        );
+
+        res.status(201).json({
+            status: true,
+            data: newMessage,
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        const statusCode = error.statusCode || 500;
+
+        res.status(statusCode).json({
+            status: false,
+            message: error.message,
+            moderation: error.moderation || null,
+        });
     }
 };
 
@@ -92,5 +120,28 @@ exports.deleteMessage = async (req, res) => {
         res.status(200).json({ status: true, message: "Message deleted successfully" });
     } catch (error) {
         res.status(500).json({ status: false, message: error.message });
+    }
+};
+
+exports.moderateMessage = async (req, res) => {
+    try {
+        const { message, conversationId } = req.body;
+        const senderId = req.user.id;
+
+        const result = await chatService.moderateMessageBeforeSend(
+            conversationId,
+            senderId,
+            message
+        );
+
+        return res.status(200).json({
+            status: true,
+            data: result,
+        });
+    } catch (error) {
+        return res.status(500).json({
+            status: false,
+            message: error.message,
+        });
     }
 };

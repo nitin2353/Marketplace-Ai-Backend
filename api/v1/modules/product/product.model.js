@@ -1,6 +1,6 @@
 const pool = require('../../../../config/database');
 const { normalizeProductRecords, normalizeProductRecord } = require("../../../../utils/global");
-
+const { parseBoolean } = require("../../../../utils/global");
 
 
 
@@ -680,4 +680,4 @@ module.exports = {
     handleFindByQueryModel,
     handleFindListByQueryModel,
     getCategorySections
-};
+};
