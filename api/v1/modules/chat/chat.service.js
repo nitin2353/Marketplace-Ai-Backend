@@ -21,17 +21,15 @@ exports.getOrCreateConversation = async (customerId, sellerId, productId) => {
 
         // Trigger notification for new customization request
 
-
-
-        await notificationTrigger.triggerNotification({
-            receiver_id: sellerId,
-            receiver_type: 'seller',
-            type: 'NEW_CUSTOMIZATION_REQUEST',
-            title: 'New Customization Request',
-            body: 'A customer has started a conversation regarding a product customization.',
-            ref_type: 'conversation',
-            ref_id: conversation.id
-        });
+        // await notificationTrigger.triggerNotification({
+        //     receiver_id: sellerId,
+        //     receiver_type: 'seller',
+        //     type: 'NEW_CUSTOMIZATION_REQUEST',
+        //     title: 'New Customization Request',
+        //     body: 'A customer has started a conversation regarding a product customization.',
+        //     ref_type: 'chat',
+        //     ref_id: conversation.id
+        // });
     }
     return conversation;
 };
@@ -124,28 +122,28 @@ exports.sendMessage = async (
         attachmentData
     );
 
-    const receiverId =
-        conversation.customer_id === senderId
-            ? conversation.seller_id
-            : conversation.customer_id;
+    // const receiverId =
+    //     conversation.customer_id === senderId
+    //         ? conversation.seller_id
+    //         : conversation.customer_id;
 
-    const receiverType =
-        conversation.customer_id === senderId ? 'seller' : 'customer';
+    // const receiverType =
+    //     conversation.customer_id === senderId ? 'seller' : 'customer';
 
-    await notificationTrigger.triggerNotification({
-        receiver_id: receiverId,
-        receiver_type: receiverType,
-        type: 'chat_message',
-        title: 'New Message',
-        body: `${senderName}: ${message
-            ? message.length > 50
-                ? message.substring(0, 47) + '...'
-                : message
-            : 'Shared a file'
-            }`,
-        ref_type: 'conversation',
-        ref_id: conversationId,
-    });
+    // await notificationTrigger.triggerNotification({
+    //     receiver_id: receiverId,
+    //     receiver_type: receiverType,
+    //     type: 'chat_message',
+    //     title: 'New Message',
+    //     body: `${senderName}: ${message
+    //         ? message.length > 50
+    //             ? message.substring(0, 47) + '...'
+    //             : message
+    //         : 'Shared a file'
+    //         }`,
+    //     ref_type: 'chat',
+    //     ref_id: conversationId,
+    // });
 
     return {
         ...newMessage,

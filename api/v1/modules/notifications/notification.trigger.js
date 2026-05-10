@@ -36,7 +36,7 @@ exports.onOrderCreated = async (orderId, userId) => {
                     type: "new_order",
                     title: "New Order Received",
                     body: `You have received a new order #${order.order_number}.`,
-                    ref_type: "order",
+                    ref_type: "orders",
                     ref_id: orderId
                 });
             }
@@ -73,7 +73,7 @@ exports.onOrderStatusUpdated = async (orderId, status) => {
             type: notificationType,
             title,
             body,
-            ref_type: "order",
+            ref_type: "orders",
             ref_id: orderId
         });
 
@@ -94,7 +94,7 @@ exports.onOrderStatusUpdated = async (orderId, status) => {
                         type: "order_cancelled",
                         title: "Order Cancelled",
                         body: `Order #${order.order_number} has been cancelled.`,
-                        ref_type: "order",
+                        ref_type: "orders",
                         ref_id: orderId
                     });
                 }
@@ -124,7 +124,7 @@ exports.onReviewCreated = async (reviewId) => {
             type: "review_submitted",
             title: "Review Submitted",
             body: `Your review for ${review.product_title} has been submitted.`,
-            ref_type: "review",
+            ref_type: "reviews",
             ref_id: reviewId
         });
 
@@ -136,7 +136,7 @@ exports.onReviewCreated = async (reviewId) => {
                 type: "review_received",
                 title: "New Review Received",
                 body: `You received a ${review.rating}-star review for ${review.product_title}.`,
-                ref_type: "review",
+                ref_type: "reviews",
                 ref_id: reviewId
             });
         }
@@ -159,7 +159,7 @@ exports.onPaymentSuccessful = async (orderId) => {
             type: "payment_successful",
             title: "Payment Successful",
             body: `Payment for order #${order.order_number} was successful.`,
-            ref_type: "order",
+            ref_type: "orders",
             ref_id: orderId
         });
 
@@ -179,7 +179,7 @@ exports.onPaymentSuccessful = async (orderId) => {
                     type: "payment_received",
                     title: "Payment Received",
                     body: `Payment received for order #${order.order_number}.`,
-                    ref_type: "order",
+                    ref_type: "orders",
                     ref_id: orderId
                 });
             }
@@ -251,7 +251,7 @@ exports.onReviewReplied = async (reviewId) => {
             type: "review_replied",
             title: "Seller Replied to Your Review",
             body: `The seller has replied to your review for ${review.product_title}.`,
-            ref_type: "review",
+            ref_type: "reviews",
             ref_id: reviewId
         });
     } catch (err) {
@@ -272,5 +272,59 @@ exports.triggerNotification = async (data) => {
         });
     } catch (err) {
         console.error("triggerNotification error:", err);
+    }
+};
+
+exports.onReturnRequestCreated = async (requestId) => {
+    try {
+        const res = await pool.query(`
+            SELECT rr.*, p.title as product_title, o.order_number
+            FROM public.return_requests rr
+            INNER JOIN public.products p ON p.id = rr.product_id
+            INNER JOIN public.orders o ON o.id = rr.order_id
+            WHERE rr.id = $1
+        `, [requestId]);
+        if (res.rows.length === 0) return;
+        const request = res.rows[0];
+
+        // Notify seller
+        await notificationService.createNotification({
+            receiver_id: request.seller_id,
+            receiver_type: "seller",
+            type: "return_requested",
+            title: `New ${request.request_type === 'return' ? 'Return' : 'Replacement'} Request`,
+            body: `You have a new ${request.request_type} request for product ${request.product_title} from order #${request.order_number}.`,
+            ref_type: "returns",
+            ref_id: requestId
+        });
+    } catch (err) {
+        console.error("onReturnRequestCreated notification error:", err);
+    }
+};
+
+exports.onReturnRequestStatusUpdated = async (requestId) => {
+    try {
+        const res = await pool.query(`
+            SELECT rr.*, p.title as product_title, o.order_number
+            FROM public.return_requests rr
+            INNER JOIN public.products p ON p.id = rr.product_id
+            INNER JOIN public.orders o ON o.id = rr.order_id
+            WHERE rr.id = $1
+        `, [requestId]);
+        if (res.rows.length === 0) return;
+        const request = res.rows[0];
+
+        // Notify customer
+        await notificationService.createNotification({
+            receiver_id: request.customer_id,
+            receiver_type: "user",
+            type: "return_status_updated",
+            title: `${request.request_type === 'return' ? 'Return' : 'Replacement'} Request ${request.status}`,
+            body: `Your ${request.request_type} request for ${request.product_title} (Order #${request.order_number}) is now ${request.status}.`,
+            ref_type: "returns",
+            ref_id: requestId
+        });
+    } catch (err) {
+        console.error("onReturnRequestStatusUpdated notification error:", err);
     }
 };

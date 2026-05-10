@@ -507,7 +507,13 @@ exports.getCustomerOrders = async (user_id) => {
     const orders = res.rows;
     for (const order of orders) {
         const itemsRes = await pool.query(
-            `SELECT * FROM public.order_items WHERE order_id = $1 ORDER BY created_time ASC`,
+            `
+            SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, p.seller_id
+            FROM public.order_items oi
+            LEFT JOIN public.products p ON p.id = oi.product_id
+            WHERE oi.order_id = $1 
+            ORDER BY oi.created_time ASC
+            `,
             [order.id]
         );
         order.items = itemsRes.rows;
@@ -547,10 +553,11 @@ exports.getCustomerOrderById = async (user_id, order_id) => {
 
     const itemsRes = await pool.query(
         `
-        SELECT *
-        FROM public.order_items
-        WHERE order_id = $1
-        ORDER BY created_time ASC
+        SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, p.seller_id
+        FROM public.order_items oi
+        LEFT JOIN public.products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        ORDER BY oi.created_time ASC
         `,
         [order_id]
     );
@@ -735,12 +742,8 @@ exports.getOrderById = async (order_id) => {
         `
     SELECT 
         oi.*,
-
-        p.weight,
-        p.length,
-        p.width,
-        p.height,
-
+        p.weight, p.length, p.width, p.height,
+        p.is_return, p.is_replace, p.return_replace_duration, p.seller_id,
         json_build_object(
             'single', json_build_object(
                 'length', COALESCE(p.length, 0),
@@ -752,18 +755,14 @@ exports.getOrderById = async (order_id) => {
             'final_pack', json_build_object(
                 'length', COALESCE(p.length, 0),
                 'width', COALESCE(p.width, 0),
-                'height', COALESCE(p.height, 0) * COALESCE(oi.quantity, 1),
-                'weight', COALESCE(p.weight, 0) * COALESCE(oi.quantity, 1)
+                'height', COALESCE(p.height, 0),
+                'weight', COALESCE(p.weight, 0) * oi.quantity
             )
-        ) AS dimension
-
+        ) as dimension_snapshot
     FROM public.order_items oi
-    LEFT JOIN public.products p 
-        ON p.id = oi.product_id
-
+    LEFT JOIN public.products p ON p.id = oi.product_id
     WHERE oi.order_id = $1
-    ORDER BY oi.created_time ASC
-    `,
+    ORDER BY oi.created_time ASC`,
         [order_id]
     );
 
@@ -826,6 +825,9 @@ exports.getOrderItems = async (order_id) => {
             p.width,
             p.height,
             p.seller_id,
+            p.is_return,
+            p.is_replace,
+            p.return_replace_duration,
             EXISTS(SELECT 1 FROM public.reviews r WHERE r.order_id = oi.order_id AND r.product_id = oi.product_id) as is_reviewed,
             json_build_object(
                 'single', json_build_object(
