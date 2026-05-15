@@ -2,6 +2,7 @@ const pool = require("../../../../config/database");
 const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const notificationTriggers = require("../notifications/notification.trigger");
+const sellerPaymentModal = require("./seller_payment.modal");
 
 const razorpay = new Razorpay({
     key_id: 'rzp_test_SZiKye10gyvfN1',
@@ -519,6 +520,7 @@ exports.verifyAndCreateOrder = async ({
         // TRIGGER NOTIFICATIONS
         notificationTriggers.onOrderCreated(order.id, user_id).catch(console.error);
         notificationTriggers.onPaymentSuccessful(order.id).catch(console.error);
+        sellerPaymentModal.recordOrderPayments(order.id).catch(console.error);
         for (const item of cartItems) {
             notificationTriggers.checkLowStock(item.product_id, item.variant_id).catch(console.error);
         }

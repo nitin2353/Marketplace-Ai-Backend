@@ -11,8 +11,8 @@ router.get("/category-sections", productController.handleGetCategorySections)
 
 router.get("/search", optionalAuth, productController.handleFindByQuery)
 router.get("/suggest", optionalAuth, productController.handleFindListByQuery)
-router.get("/:id", authMiddleware, productController.handleGetProductById)
-router.put("/:id", authMiddleware, upload.array('images' ,5), productController.updateProduct)
+router.get("/:id", optionalAuth, productController.handleGetProductById)
+router.put("/:id", authMiddleware, upload.array('images', 5), productController.updateProduct)
 router.post("/create", authMiddleware, upload.array("images", 5), productController.createProduct);
 router.delete("/:id", authMiddleware, productController.handleDeleteProduct)
 

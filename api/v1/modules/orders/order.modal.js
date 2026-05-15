@@ -1,6 +1,7 @@
 const pool = require("../../../../config/database");
 const crypto = require("crypto");
 const notificationTriggers = require("../notifications/notification.trigger");
+const sellerPaymentModal = require("../payments/seller_payment.modal");
 
 
 const generateOrderNumber = () => {
@@ -476,6 +477,7 @@ exports.createOrderFromCart = async ({
 
         // TRIGGER NOTIFICATIONS
         notificationTriggers.onOrderCreated(order.id, user_id).catch(console.error);
+        sellerPaymentModal.recordOrderPayments(order.id).catch(console.error);
 
         return {
             order,
@@ -940,6 +942,7 @@ exports.updateOrderStatus = async (order_id, order_status, modified_by = null) =
 
         // TRIGGER NOTIFICATION
         notificationTriggers.onOrderStatusUpdated(order_id, order_status).catch(console.error);
+        sellerPaymentModal.updatePaymentStatusByOrder(order_id, order_status).catch(console.error);
 
         // TRIGGER LOW STOCK CHECK IF DEDUCTED
         if (order_status === "confirmed" && order.order_status !== "confirmed") {
@@ -973,6 +976,10 @@ exports.updatePaymentStatus = async (order_id, payment_status, modified_by = nul
         `,
         [payment_status, modified_by, order_id]
     );
+    
+    if (res.rows.length > 0) {
+        sellerPaymentModal.updatePaymentStatusByOrder(order_id, null, payment_status).catch(console.error);
+    }
 
     if (res.rows.length === 0) {
         throw new Error("Order not found");
@@ -1104,6 +1111,9 @@ exports.verifyOrderPayment = async ({
 
         await client.query("COMMIT");
 
+        // SYNC PAYMENTS
+        sellerPaymentModal.updatePaymentStatusByOrder(order_id, 'confirmed', 'paid').catch(console.error);
+
         // TRIGGER NOTIFICATIONS
         notificationTriggers.onPaymentSuccessful(order.id).catch(console.error);
         for (const item of itemsRes.rows) {
@@ -1150,6 +1160,7 @@ exports.cancelOrder = async (order_id, modified_by = null) => {
 
     // TRIGGER NOTIFICATION
     notificationTriggers.onOrderStatusUpdated(order_id, 'cancelled').catch(console.error);
+    sellerPaymentModal.updatePaymentStatusByOrder(order_id, 'cancelled').catch(console.error);
 
     return res.rows[0];
 };
