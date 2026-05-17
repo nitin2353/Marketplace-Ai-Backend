@@ -7,12 +7,12 @@ exports.getSellerSummary = async (sellerId) => {
     const query = `
         WITH seller_stats AS (
             SELECT 
-                COALESCE(SUM(seller_earning), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as total_revenue,
                 COALESCE(SUM(CASE WHEN (settlement_status = 'pending' OR settlement_status = 'eligible') AND (o.payment_status = 'paid' OR o.order_status = 'delivered') THEN seller_earning ELSE 0 END), 0) as available_balance,
                 COALESCE(SUM(CASE WHEN settlement_status = 'pending' AND o.payment_status = 'pending' AND o.order_status != 'delivered' AND o.order_status != 'cancelled' THEN seller_earning ELSE 0 END), 0) as pending_balance,
-                COALESCE(SUM(refund_amount), 0) as refunded_amount,
-                COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_TIMESTAMP) THEN seller_earning ELSE 0 END), 0) as monthly_earning,
-                COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', CURRENT_TIMESTAMP) THEN seller_earning ELSE 0 END), 0) as today_earning,
+                COALESCE(SUM(CASE WHEN settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(refund_amount, 0), amount, 0) ELSE refund_amount END), 0) as refunded_amount,
+                COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_TIMESTAMP) AND settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as monthly_earning,
+                COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', CURRENT_TIMESTAMP) AND settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as today_earning,
                 COUNT(DISTINCT order_id) as total_orders
             FROM public.payments p
             JOIN public.orders o ON o.id = p.order_id
@@ -47,8 +47,8 @@ exports.getSellerTransactions = async (sellerId, filters = {}) => {
             o.payment_gateway,
             p.amount,
             p.platform_fee,
-            p.seller_earning,
-            p.refund_amount,
+            CASE WHEN p.settlement_status IN ('cancelled', 'refunded') THEN 0 ELSE p.seller_earning END as seller_earning,
+            CASE WHEN p.settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(p.refund_amount, 0), p.amount, 0) ELSE p.refund_amount END as refund_amount,
             p.settlement_status,
             o.payment_status,
             p.created_at as created_time
@@ -95,6 +95,8 @@ exports.getTransactionById = async (sellerId, transactionId) => {
     const query = `
         SELECT 
             p.*,
+            CASE WHEN p.settlement_status IN ('cancelled', 'refunded') THEN 0 ELSE p.seller_earning END as seller_earning,
+            CASE WHEN p.settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(p.refund_amount, 0), p.amount, 0) ELSE p.refund_amount END as refund_amount,
             o.order_number,
             o.order_status,
             o.payment_status,
@@ -124,7 +126,7 @@ exports.getSellerChartData = async (sellerId) => {
     const monthlyQuery = `
         SELECT 
             TO_CHAR(created_at, 'Mon YYYY') as label,
-            SUM(seller_earning) as value
+            SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END) as value
         FROM public.payments
         WHERE seller_id = $1 AND created_at >= NOW() - INTERVAL '6 months'
         GROUP BY label, date_trunc('month', created_at)
@@ -135,7 +137,7 @@ exports.getSellerChartData = async (sellerId) => {
     const methodQuery = `
         SELECT 
             payment_method as name,
-            SUM(seller_earning) as value
+            SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END) as value
         FROM public.payments
         WHERE seller_id = $1
         GROUP BY payment_method
@@ -145,13 +147,13 @@ exports.getSellerChartData = async (sellerId) => {
     const refundQuery = `
         SELECT 
             'Refunded' as name,
-            SUM(refund_amount) as value
+            SUM(CASE WHEN settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(refund_amount, 0), amount, 0) ELSE refund_amount END) as value
         FROM public.payments
         WHERE seller_id = $1
         UNION ALL
         SELECT 
             'Earned' as name,
-            SUM(seller_earning) as value
+            SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END) as value
         FROM public.payments
         WHERE seller_id = $1
     `;
@@ -259,13 +261,13 @@ exports.updatePaymentStatusByOrder = async (orderId, orderStatus, paymentStatus)
     
     if (orderStatus) {
         if (orderStatus === 'cancelled') {
-            query += `, status = 'cancelled', settlement_status = 'cancelled'`;
+            query += `, status = 'cancelled', settlement_status = 'cancelled', seller_earning = 0, platform_fee = 0, refund_amount = CASE WHEN payment_method != 'cod' THEN amount ELSE 0 END`;
         } else if (orderStatus === 'delivered') {
             // When delivered, online payments are eligible for settlement
             // COD payments are also marked paid and eligible for settlement
             query += `, settlement_status = 'eligible', status = 'paid'`;
         } else if (orderStatus === 'returned') {
-            query += `, settlement_status = 'refunded'`;
+            query += `, settlement_status = 'refunded', seller_earning = 0, platform_fee = 0, refund_amount = amount`;
         }
     }
     
