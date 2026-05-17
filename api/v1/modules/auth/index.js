@@ -9,6 +9,11 @@ router.post("/seller/register", authController.registerSeller);
 router.post("/register", authController.customerRregister);
 router.post("/login", authController.login);
 
+
+router.post("/send-reset-otp", authController.sendResetOtp);
+router.post("/verify-reset-otp", authController.verifyResetOtp);
+router.post("/reset-password", authController.resetPassword);
+
 router.get("/profile", authMiddleware, authController.getProfile);
 router.get("/users", authMiddleware, authController.getAllUsers);
 router.get("/users/:id", authMiddleware, authController.getUserById);

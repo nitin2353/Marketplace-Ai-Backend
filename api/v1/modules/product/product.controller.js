@@ -3,6 +3,7 @@ const Response = require("../response");
 const UTILS = require('../../../../utils/global');
 const pool = require('../../../../config/database');
 const { parseBoolean } = require("../../../../utils/global");
+const { status } = require("init");
 
 
 
@@ -261,7 +262,7 @@ const updateProduct = async (req, res) => {
             wishlist_count: parseNumber(req.body.wishlist_count, 0),
             cart_count: parseNumber(req.body.cart_count, 0),
 
-            status: req.body.status || "draft",
+            status: req.body.status || "true",
 
             variants: safeParse(req.body.variants, []),
         };
@@ -308,6 +309,9 @@ const handleDeleteProduct = async (req, res) => {
         }
 
         const deletedRecord = await productModel.deleteById(id);
+
+        console.log("Deleted product record:", deletedRecord);
+
 
         return Response.success(res, "Product deleted successfully", deletedRecord);
 

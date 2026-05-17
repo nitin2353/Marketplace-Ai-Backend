@@ -447,7 +447,7 @@ const modelHandleUpdateProduct = async (data) => {
             data.slug || null,
             data.meta_title || null,
             data.meta_description || null,
-            parseBoolean(data.status === "active" || data.status === true, true),
+            data.status || true,
             data.category || null,
             data.modified_by,
             data.id

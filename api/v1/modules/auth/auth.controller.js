@@ -2,6 +2,8 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Response = require("../response");
 const authModel = require("./auth.modal");
+const { sendMail } = require("../../../../config/mail.config");
+const otpStore = require("../../../../config/otp.store");
 
 // ── CUSTOMER REGISTER ────────────────────────────────────────────────────────
 exports.customerRregister = async (req, res) => {
@@ -73,7 +75,7 @@ exports.registerSeller = async (req, res) => {
         if (!password) return Response.badRequest(res, "Password is required");
         if (!phone) return Response.badRequest(res, "Phone number is required");
         if (!business_name) return Response.badRequest(res, "Business name is required for sellers");
-        
+
         if (!/^\d{10}$/.test(phone)) {
             return Response.badRequest(res, "Phone number must be exactly 10 digits");
         }
@@ -84,7 +86,7 @@ exports.registerSeller = async (req, res) => {
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        
+
         // Extract names
         const nameParts = (name || "").trim().split(" ");
         const first_name = nameParts[0] || "Seller";
@@ -135,7 +137,7 @@ exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await authModel.findUserByEmail(email);
-        
+
         if (!user) {
             return Response.notFound(res, "User not found");
         }
@@ -155,9 +157,9 @@ exports.login = async (req, res) => {
 
         // Generate Token (Safe Payload - NO PASSWORD)
         const token = jwt.sign(
-            { 
-                id: user.id, 
-                role: user.role, 
+            {
+                id: user.id,
+                role: user.role,
                 email: user.email,
                 name: user.name,
                 business_name: user.business_name
@@ -166,8 +168,8 @@ exports.login = async (req, res) => {
             { expiresIn: "5h" }
         );
 
-        return Response.success(res, "Login successful", { 
-            token, 
+        return Response.success(res, "Login successful", {
+            token,
             role: user.role,
             user: {
                 id: user.id,
@@ -247,10 +249,10 @@ exports.updateUser = async (req, res) => {
         if (req.body.phone && !/^[0-9+\s\-]{7,15}$/.test(req.body.phone)) {
             return Response.badRequest(res, "Invalid phone number format");
         }
-        
+
         const updatedUser = await authModel.updateUser(id, req.body);
         if (updatedUser) delete updatedUser.password;
-        
+
         return Response.success(res, "User updated successfully", { user: updatedUser });
     } catch (err) {
         console.error("UPDATE USER ERROR:", err);
@@ -347,3 +349,83 @@ exports.deleteUser = async (req, res) => {
         return Response.serverError(res);
     }
 };
+
+exports.sendResetOtp = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const existingUser = await authModel.findUserByEmail(email);
+        if (!existingUser) return Response.notFound(res, "User not found");
+
+        // Generate and send reset OTP
+        const otp = Math.floor(100000 + Math.random() * 900000);
+
+        // Send OTP via email
+        await sendMail({
+            to: existingUser.email,
+            subject: "Password Reset OTP",
+            html: `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto; padding: 20px; border: 1px solid #eeeeee; border-radius: 10px;">
+                    <h2 style="color: #355aff;">ShopEase Password Reset</h2>
+                    <p>Hello,</p>
+                    <p>Your password reset OTP is:</p>
+                    <h1 style="letter-spacing: 6px; background:#f8fafc; padding: 14px; text-align:center; border-radius: 8px;">
+                        ${otp}
+                    </h1>
+                    <p>This OTP is valid for <b>10 minutes</b>.</p>
+                    <p>If you did not request this, please ignore this email.</p>
+                    <br/>
+                    <p>Regards,<br/>ShopEase Team</p>
+                </div>`
+        });
+
+
+        otpStore.setOtp(email, otp);
+
+
+        return Response.success(res, "Reset OTP sent successfully");
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+exports.verifyResetOtp = async (req, res) => {
+    try {
+        const { otp, email } = req.body;
+
+        const otpData = otpStore.verifyOtp(email, otp);
+
+
+        if (!otpData.success) return Response.badRequest(res, "Invalid or expired OTP");
+
+        if (otpData.data.otp !== otp) {
+            return Response.badRequest(res, "Invalid OTP");
+        }
+
+        if (Date.now() > otpData.expiresAt) {
+            otpStore.deleteOtp(email.toLowerCase()); // Clean up expired OTP
+            return Response.badRequest(res, "OTP expired");
+        }
+
+        otpStore.deleteOtp(email.toLowerCase());
+        return Response.success(res, "OTP verified successfully");
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+
+exports.resetPassword = async (req, res) => {
+    try {
+        const { email, new_password } = req.body;
+        const existingUser = await authModel.findUserByEmail(email);
+        if (!existingUser) return Response.notFound(res, "User not found");
+        const hashedPassword = await bcrypt.hash(new_password, 10);
+        await authModel.updatePassword(existingUser.id, hashedPassword);
+        return Response.success(res, "Password reset successfully");
+    } catch (err) {
+        return Response.serverError(res, err.message);
+    }
+};
+
+
+
+
