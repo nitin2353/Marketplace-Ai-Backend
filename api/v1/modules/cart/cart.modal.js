@@ -16,6 +16,7 @@ const getAllCart = async (user_id) => {
             p.image_url,
             p.brand,
             p.stock As product_avl_stock,
+            p.tax_percentage,
 
             v.id AS variant_id,
             v.color,

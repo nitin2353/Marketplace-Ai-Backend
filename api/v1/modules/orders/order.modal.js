@@ -117,7 +117,7 @@ exports.createOrderFromCart = async ({
                     `
                     SELECT 
                         p.id as product_id, p.title, p.description, p.base_price, p.brand, 
-                        p.category, p.tag, p.image_url, p.seller_id, p.stock as product_stock,
+                        p.category, p.tag, p.image_url, p.seller_id, p.stock as product_stock, p.tax_percentage,
                         v.id as variant_id, v.color as variant_color, v.size as variant_size, 
                         v.final_price, v.stock as variant_stock
                     FROM public.products p
@@ -160,6 +160,7 @@ exports.createOrderFromCart = async ({
                     p.image_url,
                     p.seller_id,
                     p.stock as product_stock,
+                    p.tax_percentage,
     
                     v.color AS variant_color,
                     v.size AS variant_size,
@@ -239,6 +240,7 @@ exports.createOrderFromCart = async ({
         let subtotal = 0;
         let total_quantity = 0;
         let total_items = cartItems.length;
+        let total_tax_amount = 0;
 
         for (const item of cartItems) {
             const quantity = Number(item.total_quantity || 0);
@@ -250,6 +252,9 @@ exports.createOrderFromCart = async ({
 
             subtotal += lineTotal;
             total_quantity += quantity;
+            
+            const itemTax = lineTotal * (Number(item.tax_percentage || 0) / 100);
+            total_tax_amount += itemTax;
 
             // stock validation
             const availableStock = item.stock;
@@ -261,7 +266,7 @@ exports.createOrderFromCart = async ({
         }
 
         const delivery_charge = 0;
-        const tax_amount = 0;
+        const tax_amount = total_tax_amount;
         const total_amount = subtotal + delivery_charge + tax_amount - discount_amount;
 
         // 5. PAYMENT CONFIG

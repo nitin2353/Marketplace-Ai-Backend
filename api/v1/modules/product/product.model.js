@@ -11,20 +11,24 @@ const getAllProducts = async (role = "customer", id = "") => {
 
         if (role === "seller") {
             query = `
-                SELECT 
+               SELECT 
                     p.*,
                     (
                         SELECT COALESCE(SUM(oi.quantity), 0)::integer
                         FROM order_items oi
                         JOIN orders o ON o.id = oi.order_id
-                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                        WHERE oi.product_id = p.id
+                        AND o.order_status NOT IN ('cancelled', 'payment_failed')
                     ) AS actual_sold,
+
                     (
                         SELECT COALESCE(SUM(oi.line_total), 0)::numeric
                         FROM order_items oi
                         JOIN orders o ON o.id = oi.order_id
-                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                        WHERE oi.product_id = p.id
+                        AND o.order_status NOT IN ('cancelled', 'payment_failed')
                     ) AS actual_revenue,
+
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -38,9 +42,19 @@ const getAllProducts = async (role = "customer", id = "") => {
                         ) FILTER (WHERE v.id IS NOT NULL),
                         '[]'
                     ) AS variants
+
                 FROM products p
-                LEFT JOIN product_variants v ON v.product_id = p.id
+                LEFT JOIN product_variants v
+                    ON v.product_id = p.id
+
                 WHERE p.seller_id = $1
+                AND (
+                    p.status = true
+                    OR p.status = 'true'
+                    OR p.status = '1'
+                    OR p.status = 'active'
+                )
+
                 GROUP BY p.id
                 ORDER BY p.created_at DESC;
             `;
