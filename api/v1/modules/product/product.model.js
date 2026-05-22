@@ -13,6 +13,18 @@ const getAllProducts = async (role = "customer", id = "") => {
             query = `
                 SELECT 
                     p.*,
+                    (
+                        SELECT COALESCE(SUM(oi.quantity), 0)::integer
+                        FROM order_items oi
+                        JOIN orders o ON o.id = oi.order_id
+                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                    ) AS actual_sold,
+                    (
+                        SELECT COALESCE(SUM(oi.line_total), 0)::numeric
+                        FROM order_items oi
+                        JOIN orders o ON o.id = oi.order_id
+                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                    ) AS actual_revenue,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -37,6 +49,18 @@ const getAllProducts = async (role = "customer", id = "") => {
             query = `
                 SELECT 
                     p.*,
+                    (
+                        SELECT COALESCE(SUM(oi.quantity), 0)::integer
+                        FROM order_items oi
+                        JOIN orders o ON o.id = oi.order_id
+                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                    ) AS actual_sold,
+                    (
+                        SELECT COALESCE(SUM(oi.line_total), 0)::numeric
+                        FROM order_items oi
+                        JOIN orders o ON o.id = oi.order_id
+                        WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                    ) AS actual_revenue,
                     COALESCE(
                         json_agg(
                             json_build_object(
@@ -52,7 +76,7 @@ const getAllProducts = async (role = "customer", id = "") => {
                     ) AS variants
                 FROM products p
                 INNER JOIN users u ON u.id = p.seller_id
-                LEFT JOIN product_variants v ON v.product_id = p.id\
+                LEFT JOIN product_variants v ON v.product_id = p.id
                 GROUP BY p.id
                 ORDER BY p.created_at DESC;
             `;
@@ -73,6 +97,18 @@ const getProductById = async (id) => {
         const query = `
             SELECT 
                 p.*,
+                (
+                    SELECT COALESCE(SUM(oi.quantity), 0)::integer
+                    FROM order_items oi
+                    JOIN orders o ON o.id = oi.order_id
+                    WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                ) AS actual_sold,
+                (
+                    SELECT COALESCE(SUM(oi.line_total), 0)::numeric
+                    FROM order_items oi
+                    JOIN orders o ON o.id = oi.order_id
+                    WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                ) AS actual_revenue,
                 COALESCE(
                     json_agg(
                         json_build_object(
@@ -94,7 +130,11 @@ const getProductById = async (id) => {
         `;
 
         const records = await pool.query(query, [id]);
-        return normalizeProductRecord(records.rows[0]);
+        const record = records.rows[0];
+        if (record && record.actual_sold !== undefined) {
+            record.sold = Number(record.actual_sold);
+        }
+        return normalizeProductRecord(record);
 
     } catch (error) {
         console.error("Error fetching product:", error.message);
@@ -508,10 +548,7 @@ const modelHandleUpdateProduct = async (data) => {
 
         await client.query("COMMIT");
 
-        return {
-            ...product,
-            variants
-        };
+        return await getProductById(data.id);
 
     } catch (error) {
         await client.query("ROLLBACK");
@@ -592,6 +629,18 @@ const getCategorySections = async () => {
         const baseQuery = `
             SELECT 
                 p.*,
+                (
+                    SELECT COALESCE(SUM(oi.quantity), 0)::integer
+                    FROM order_items oi
+                    JOIN orders o ON o.id = oi.order_id
+                    WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                ) AS actual_sold,
+                (
+                    SELECT COALESCE(SUM(oi.line_total), 0)::numeric
+                    FROM order_items oi
+                    JOIN orders o ON o.id = oi.order_id
+                    WHERE oi.product_id = p.id AND o.order_status NOT IN ('cancelled', 'payment_failed')
+                ) AS actual_revenue,
                 COALESCE(
                     json_agg(
                         json_build_object(
@@ -623,7 +672,7 @@ const getCategorySections = async () => {
         });
 
         // 2. Trending
-        const trending = await pool.query(`${baseQuery} ${groupBy} ORDER BY p.sold DESC LIMIT 12`);
+        const trending = await pool.query(`${baseQuery} ${groupBy} ORDER BY actual_sold DESC LIMIT 12`);
         sections.push({
             section_key: "trending",
             title: "Trending Products",

@@ -113,9 +113,13 @@ const normalizeProductRecord = (product) => {
     if (!product) return null;
 
     const parsedImages = normalizeProductImages(product.image_url);
+    const sold = product.actual_sold !== undefined ? Number(product.actual_sold) : Number(product.sold || 0);
+    const revenue = product.actual_revenue !== undefined ? Number(product.actual_revenue) : 0;
 
     return {
         ...product,
+        sold,
+        revenue,
         image_url: parsedImages,
         images: parsedImages,
         img: parsedImages[0] || null,

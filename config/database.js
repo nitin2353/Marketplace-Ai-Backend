@@ -7,9 +7,9 @@
       password: dbConfig.password,
       database: dbConfig.database,
       port: dbConfig.port,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      // ssl: {
+      //   rejectUnauthorized: false,
+      // },
     });
 
 

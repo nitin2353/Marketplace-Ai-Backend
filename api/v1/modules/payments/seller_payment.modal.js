@@ -7,7 +7,7 @@ exports.getSellerSummary = async (sellerId) => {
     const query = `
         WITH seller_stats AS (
             SELECT 
-                COALESCE(SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN settlement_status NOT IN ('cancelled', 'refunded') THEN amount ELSE 0 END), 0) as total_revenue,
                 COALESCE(SUM(CASE WHEN (settlement_status = 'pending' OR settlement_status = 'eligible') AND (o.payment_status = 'paid' OR o.order_status = 'delivered') THEN seller_earning ELSE 0 END), 0) as available_balance,
                 COALESCE(SUM(CASE WHEN settlement_status = 'pending' AND o.payment_status = 'pending' AND o.order_status != 'delivered' AND o.order_status != 'cancelled' THEN seller_earning ELSE 0 END), 0) as pending_balance,
                 COALESCE(SUM(CASE WHEN settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(refund_amount, 0), amount, 0) ELSE refund_amount END), 0) as refunded_amount,

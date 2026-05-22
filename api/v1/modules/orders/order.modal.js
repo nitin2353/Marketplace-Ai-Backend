@@ -933,6 +933,37 @@ exports.updateOrderStatus = async (order_id, order_status, modified_by = null) =
             }
         }
 
+        // If status changing to cancelled and it was previously confirmed/processing/shipped/delivered, restore stock
+        const stockDeductedStatuses = ["confirmed", "processing", "shipped", "delivered"];
+        if (order_status === "cancelled" && stockDeductedStatuses.includes(order.order_status)) {
+            const itemsRes = await client.query("SELECT * FROM public.order_items WHERE order_id = $1", [order_id]);
+
+            for (const item of itemsRes.rows) {
+                const quantity = Number(item.quantity || 0);
+                if (item.variant_id) {
+                    await client.query(
+                        `UPDATE public.product_variants SET stock = stock + $1, modified_time = NOW() WHERE id = $2`,
+                        [quantity, item.variant_id]
+                    );
+                    await client.query(
+                        `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1), modified_time = NOW() WHERE id = $1`,
+                        [item.product_id]
+                    );
+                } else {
+                    await client.query(
+                        `UPDATE public.products SET stock = stock + $1, modified_time = NOW() WHERE id = $2`,
+                        [quantity, item.product_id]
+                    );
+                }
+
+                // Decrement sold quantity
+                await client.query(
+                    `UPDATE public.products SET sold = GREATEST(0, COALESCE(sold, 0) - $1), modified_time = NOW() WHERE id = $2`,
+                    [quantity, item.product_id]
+                );
+            }
+        }
+
         const res = await client.query(
             `UPDATE public.orders SET order_status = $1, modified_by = $2, modified_time = NOW() WHERE id = $3 RETURNING *`,
             [order_status, modified_by, order_id]
