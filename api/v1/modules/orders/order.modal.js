@@ -558,6 +558,7 @@ exports.getCustomerOrderById = async (user_id, order_id) => {
 
     const order = orderRes.rows[0];
 
+
     const itemsRes = await pool.query(
         `
         SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, p.seller_id
