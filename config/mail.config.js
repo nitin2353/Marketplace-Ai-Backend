@@ -1,28 +1,70 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
+console.log("📧 Mail Service Initializing...");
+
+console.log("MAIL_USER:", process.env.MAIL_USER);
+console.log(
+  "MAIL_PASS:",
+  process.env.MAIL_PASS ? "FOUND ✅" : "MISSING ❌"
+);
+
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
-    },
+  service: "gmail",
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+  },
+});
+
+// SMTP Verification
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("❌ SMTP VERIFY ERROR:");
+    console.error(error);
+  } else {
+    console.log("✅ SMTP SERVER READY");
+  }
 });
 
 const sendMail = async ({ to, subject, html }) => {
-    console.log('to, subject, html', to, subject, html)
-    const resp = await transporter.sendMail({
-        from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER}>`,
-        to,
-        subject,
-        html
-    });
-    console.log('transporter', resp)
-    return resp
+  try {
+    console.log("=================================");
+    console.log("📨 SEND MAIL REQUEST RECEIVED");
+    console.log("TO:", to);
+    console.log("SUBJECT:", subject);
+    console.log("=================================");
+
+    const mailOptions = {
+      from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${
+        process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER
+      }>`,
+      to,
+      subject,
+      html,
+    };
+
+    console.log("📤 BEFORE transporter.sendMail()");
+
+    const response = await transporter.sendMail(mailOptions);
+
+    console.log("✅ MAIL SENT SUCCESSFULLY");
+    console.log("MESSAGE ID:", response.messageId);
+    console.log("RESPONSE:", response);
+
+    return response;
+  } catch (error) {
+    console.error("❌ SEND MAIL ERROR");
+    console.error("MESSAGE:", error.message);
+    console.error("CODE:", error.code);
+    console.error("COMMAND:", error.command);
+    console.error("FULL ERROR:", error);
+
+    throw error;
+  }
 };
 
 module.exports = {
-    sendMail,
+  sendMail,
+  transporter,
 };
