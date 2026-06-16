@@ -9,17 +9,18 @@ const transporter = nodemailer.createTransport({
         pass: process.env.MAIL_PASS,
     }
 })
-console.log("transporter", transporter)
 
 
 const sendMail = async ({ to, subject, html }) => {
     console.log('to, subject, html', to, subject, html)
-    return await transporter.sendMail({
+    const resp = await transporter.sendMail({
         from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER}>`,
         to,
         subject,
         html
     });
+    console.log('transporter', resp)
+    return resp
 };
 
 module.exports = {
