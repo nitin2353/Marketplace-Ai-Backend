@@ -383,7 +383,8 @@ exports.sendResetOtp = async (req, res) => {
 
         return Response.success(res, "Reset OTP sent successfully");
     } catch (err) {
-        return Response.serverError(res, err.message);
+        console.error("SEND OTP ERROR:", err);
+        return Response.serverError(res, "Failed to send OTP email: " + err.message);
     }
 };
 
@@ -405,7 +406,8 @@ exports.verifyResetOtp = async (req, res) => {
             return Response.badRequest(res, "OTP expired");
         }
 
-        otpStore.deleteOtp(email.toLowerCase());
+        // OTP is verified, but do NOT delete it yet. It is needed for resetPassword to check.
+        // It will be deleted in resetPassword.
         return Response.success(res, "OTP verified successfully");
     } catch (err) {
         return Response.serverError(res, err.message);
@@ -416,10 +418,21 @@ exports.verifyResetOtp = async (req, res) => {
 exports.resetPassword = async (req, res) => {
     try {
         const { email, new_password } = req.body;
+        
+        // Ensure OTP was verified first
+        if (!otpStore.isOtpVerified(email)) {
+            return Response.badRequest(res, "Please verify OTP first before resetting password");
+        }
+
         const existingUser = await authModel.findUserByEmail(email);
         if (!existingUser) return Response.notFound(res, "User not found");
+        
         const hashedPassword = await bcrypt.hash(new_password, 10);
         await authModel.updatePassword(existingUser.id, hashedPassword);
+        
+        // Cleanup OTP
+        otpStore.deleteOtp(email);
+        
         return Response.success(res, "Password reset successfully");
     } catch (err) {
         return Response.serverError(res, err.message);
