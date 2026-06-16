@@ -352,8 +352,11 @@ exports.deleteUser = async (req, res) => {
 
 exports.sendResetOtp = async (req, res) => {
     try {
+        console.log("doneee")
         const { email } = req.body;
+        console.log('email', email)
         const existingUser = await authModel.findUserByEmail(email);
+        console.log('existingUser', existingUser)
         if (!existingUser) return Response.notFound(res, "User not found");
 
         // Generate and send reset OTP
