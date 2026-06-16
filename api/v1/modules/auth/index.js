@@ -7,8 +7,10 @@ const authController = require("./auth.controller");
 router.post("/customer/register", authController.customerRregister);
 router.post("/seller/register", authController.registerSeller);
 router.post("/register", authController.customerRregister);
-router.post("/login", authController.login)
-.post("/send-reset-otp", authController.sendResetOtp);
+router.post("/login", authController.login);
+
+
+router.post("/send-reset-otp", authController.sendResetOtp);
 router.post("/verify-reset-otp", authController.verifyResetOtp);
 router.post("/reset-password", authController.resetPassword);
 
