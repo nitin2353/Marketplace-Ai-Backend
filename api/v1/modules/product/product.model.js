@@ -49,8 +49,7 @@ const getAllProducts = async (role = "customer", id = "") => {
 
                 WHERE p.seller_id = $1
                 AND (
-                    p.status = true
-                    OR p.status = 'true'
+                    p.status = 'true'
                     OR p.status = '1'
                     OR p.status = 'active'
                 )

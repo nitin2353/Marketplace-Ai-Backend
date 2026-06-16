@@ -13,7 +13,7 @@ router.get("/customer/:user_id", authMiddleware, controller.getCustomerOrders);
 router.get("/customer/:user_id/:order_id", authMiddleware, controller.getCustomerOrderById);
 
 // Seller routes
-router.get("/seller/:seller_id", authMiddleware, controller.getSellerOrders);
+router.get("/seller/:seller_id",  controller.getSellerOrders);
 router.get("/seller/:seller_id/:order_id", authMiddleware, controller.getSellerOrderById);
 
 // Single order details

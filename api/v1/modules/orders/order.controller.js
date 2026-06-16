@@ -1,5 +1,6 @@
 const orderService = require("./order.modal");
 const Response = require('../response');
+const ResponseManager = require("../response");
 
 // =====================================
 // CREATE ORDER
@@ -144,12 +145,7 @@ exports.getSellerOrders = async (req, res) => {
         const { seller_id } = req.params;
 
         const data = await orderService.getSellerOrders(seller_id);
-
-        return res.status(200).json({
-            success: true,
-            message: "Seller orders fetched successfully",
-            data
-        });
+        return ResponseManager.success(res ,"Record Successfully Fetched", data);
     } catch (err) {
         console.error("GET SELLER ORDERS ERROR:", err);
         return res.status(500).json({

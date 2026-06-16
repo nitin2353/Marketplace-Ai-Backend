@@ -244,6 +244,7 @@ exports.createOrderFromCart = async ({
 
         for (const item of cartItems) {
             const quantity = Number(item.total_quantity || 0);
+            
             const unitPrice = item.variant_id
                 ? Number(item.final_price || 0)
                 : Number(item.base_price || 0);
@@ -254,8 +255,8 @@ exports.createOrderFromCart = async ({
             total_quantity += quantity;
             
             const itemTax = lineTotal * (Number(item.tax_percentage || 0) / 100);
+            
             total_tax_amount += itemTax;
-
             // stock validation
             const availableStock = item.stock;
             if (availableStock !== null && availableStock !== undefined) {
@@ -325,10 +326,10 @@ exports.createOrderFromCart = async ({
                 total_items,
                 total_quantity,
                 subtotal,
-                delivery_charge,
+                subtotal <= 499 ? 49 : 0,
                 discount_amount,
                 tax_amount,
-                total_amount,
+                subtotal <= 499 ? total_amount + 49 : total_amount,
                 payment_method,
                 payment_status,
                 payment_gateway,
@@ -467,8 +468,6 @@ exports.createOrderFromCart = async ({
                 user.mobile || user.phone || ""
             ]
         );
-
-        console.log("Order created. Stock validation passed. Deduction deferred to payment/confirmation.");
 
 
         if (!items || items.length === 0) {
@@ -809,7 +808,6 @@ exports.getOrderById = async (order_id) => {
         `SELECT * from public.address where user_id = $1`,
         [sellerDetails.rows[0].id]
     ) : { rows: [] };
-    console.log("sellerDetails fetched for order details")
 
     return {
         ...order,
