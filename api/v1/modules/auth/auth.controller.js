@@ -361,9 +361,9 @@ exports.sendResetOtp = async (req, res) => {
 
         // Generate and send reset OTP
         const otp = Math.floor(100000 + Math.random() * 900000);
-
+        console.log("otp", otp)
         // Send OTP via email
-        await sendMail({
+        const response = await sendMail({
             to: existingUser.email,
             subject: "Password Reset OTP",
             html: `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto; padding: 20px; border: 1px solid #eeeeee; border-radius: 10px;">
@@ -379,6 +379,8 @@ exports.sendResetOtp = async (req, res) => {
                     <p>Regards,<br/>ShopEase Team</p>
                 </div>`
         });
+
+        console.log("response", response)
 
 
         otpStore.setOtp(email, otp);
