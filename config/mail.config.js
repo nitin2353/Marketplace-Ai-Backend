@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
 })
 
 const sendMail = async ({ to, subject, html }) => {
-    return transporter.sendMail({
+    return await transporter.sendMail({
         from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER}>`,
         to,
         subject,
@@ -20,6 +20,5 @@ const sendMail = async ({ to, subject, html }) => {
 };
 
 module.exports = {
-    transporter,
     sendMail,
 };
