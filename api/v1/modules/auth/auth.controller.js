@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const Response = require("../response");
 const authModel = require("./auth.modal");
-const { sendMail } = require("../../../../config/mail.config");
+const { sendMail, transporter } = require("../../../../config/mail.config");
 const otpStore = require("../../../../config/otp.store");
 
 // ── CUSTOMER REGISTER ────────────────────────────────────────────────────────
