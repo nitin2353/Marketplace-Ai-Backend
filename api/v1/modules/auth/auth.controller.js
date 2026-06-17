@@ -350,48 +350,48 @@ exports.deleteUser = async (req, res) => {
     }
 };
 
-exports.sendResetOtp = async (req, res) => {
-    try {
-        console.log("doneee")
-        const { email } = req.body;
-        console.log('email', email)
-        const existingUser = await authModel.findUserByEmail(email);
-        console.log('existingUser', existingUser)
-        if (!existingUser) return Response.notFound(res, "User not found");
+    exports.sendResetOtp = async (req, res) => {
+        try {
+            console.log("doneee")
+            const { email } = req.body;
+            console.log('email', email)
+            const existingUser = await authModel.findUserByEmail(email);
+            console.log('existingUser', existingUser)
+            if (!existingUser) return Response.notFound(res, "User not found");
 
-        // Generate and send reset OTP
-        const otp = Math.floor(100000 + Math.random() * 900000);
-        console.log("otp", otp)
-        // Send OTP via email
-        const response = await sendMail({
-            to: existingUser.email,
-            subject: "Password Reset OTP",
-            html: `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto; padding: 20px; border: 1px solid #eeeeee; border-radius: 10px;">
-                    <h2 style="color: #355aff;">ShopEase Password Reset</h2>
-                    <p>Hello,</p>
-                    <p>Your password reset OTP is:</p>
-                    <h1 style="letter-spacing: 6px; background:#f8fafc; padding: 14px; text-align:center; border-radius: 8px;">
-                        ${otp}
-                    </h1>
-                    <p>This OTP is valid for <b>10 minutes</b>.</p>
-                    <p>If you did not request this, please ignore this email.</p>
-                    <br/>
-                    <p>Regards,<br/>ShopEase Team</p>
-                </div>`
-        });
+            // Generate and send reset OTP
+            const otp = Math.floor(100000 + Math.random() * 900000);
+            console.log("otp", otp)
+            // Send OTP via email
+            const response = await sendMail({
+                to: existingUser.email,
+                subject: "Password Reset OTP",
+                html: `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto; padding: 20px; border: 1px solid #eeeeee; border-radius: 10px;">
+                        <h2 style="color: #355aff;">ShopEase Password Reset</h2>
+                        <p>Hello,</p>
+                        <p>Your password reset OTP is:</p>
+                        <h1 style="letter-spacing: 6px; background:#f8fafc; padding: 14px; text-align:center; border-radius: 8px;">
+                            ${otp}
+                        </h1>
+                        <p>This OTP is valid for <b>10 minutes</b>.</p>
+                        <p>If you did not request this, please ignore this email.</p>
+                        <br/>
+                        <p>Regards,<br/>ShopEase Team</p>
+                    </div>`
+            });
 
-        console.log("response", response)
-
-
-        otpStore.setOtp(email, otp);
+            console.log("response", response)
 
 
-        return Response.success(res, "Reset OTP sent successfully");
-    } catch (err) {
-        console.error("SEND OTP ERROR:", err);
-        return Response.serverError(res, "Failed to send OTP email: " + err.message);
-    }
-};
+            otpStore.setOtp(email, otp);
+
+
+            return Response.success(res, "Reset OTP sent successfully");
+        } catch (err) {
+            console.error("SEND OTP ERROR:", err);
+            return Response.serverError(res, "Failed to send OTP email: " + err.message);
+        }
+    };
 
 exports.verifyResetOtp = async (req, res) => {
     try {
