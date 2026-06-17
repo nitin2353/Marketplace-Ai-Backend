@@ -8,8 +8,8 @@ const transporter = nodemailer.createTransport({
     port: 587,
     secure: false,
     auth: {
-        user: process.env.MAIL_USER,
-        pass: process.env.MAIL_PASS,
+        user: 'nv5327260@gmail.com',
+        pass: 'vggh ioza bvxr efsf',
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
@@ -30,7 +30,7 @@ const sendMail = async ({ to, subject, html }) => {
     try {
 
         const mailOptions = {
-            from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER
+            from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || 'nv5327260@gmail.com'
                 }>`,
             to,
             subject,
