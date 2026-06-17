@@ -36,15 +36,7 @@ transporter.verify((error, success) => {
 
 const sendMail = async ({ to, subject, html }) => {
     try {
-        console.log("=================================");
-        console.log("📨 SEND MAIL REQUEST RECEIVED");
-        console.log("TO:", to);
-        console.log("SUBJECT:", subject);
-        console.log("=================================");
-        console.log({
-            user: process.env.MAIL_USER,
-            pass: process.env.MAIL_PASS,
-        })
+
         const mailOptions = {
             from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER
                 }>`,
@@ -53,22 +45,11 @@ const sendMail = async ({ to, subject, html }) => {
             html,
         };
 
-        console.log("📤 BEFORE transporter.sendMail()");
 
         const response = await transporter.sendMail(mailOptions);
-
-        console.log("✅ MAIL SENT SUCCESSFULLY");
-        console.log("MESSAGE ID:", response.messageId);
-        console.log("RESPONSE:", response);
-
         return response;
     } catch (error) {
-        console.error("❌ SEND MAIL ERROR");
-        console.error("MESSAGE:", error.message);
-        console.error("CODE:", error.code);
-        console.error("COMMAND:", error.command);
-        console.error("FULL ERROR:", error);
-
+        console.error("❌ SEND MAIL ERROR", error.message);
         throw error;
     }
 };
