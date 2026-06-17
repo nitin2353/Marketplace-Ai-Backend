@@ -1,13 +1,6 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
 
-console.log("📧 Mail Service Initializing...");
-
-console.log("MAIL_USER:", process.env.MAIL_USER);
-console.log(
-    "MAIL_PASS:",
-    process.env.MAIL_PASS ? "FOUND ✅" : "MISSING ❌"
-);
 
 const transporter = nodemailer.createTransport({
     host: "smtp.gmail.com",
@@ -19,12 +12,10 @@ const transporter = nodemailer.createTransport({
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
-    socketTimeout: 10000,
-    tls: {
-        rejectUnauthorized: false,
-    },
+    socketTimeout: 10000
 });
-// SMTP Verification
+
+
 transporter.verify((error, success) => {
     if (error) {
         console.error("❌ SMTP VERIFY ERROR:");
