@@ -41,7 +41,10 @@ const sendMail = async ({ to, subject, html }) => {
         console.log("TO:", to);
         console.log("SUBJECT:", subject);
         console.log("=================================");
-
+        console.log({
+            user: process.env.MAIL_USER,
+            pass: process.env.MAIL_PASS,
+        })
         const mailOptions = {
             from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || process.env.MAIL_USER
                 }>`,
