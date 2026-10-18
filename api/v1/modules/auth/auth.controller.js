@@ -433,8 +433,6 @@ exports.sendResetOtp = async (req, res) => {
                     </div>`
         });
 
-        
-        console.log('response', response)
         otpStore.setOtp(email, otp);
         
         
