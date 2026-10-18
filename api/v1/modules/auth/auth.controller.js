@@ -433,13 +433,14 @@ exports.sendResetOtp = async (req, res) => {
                     </div>`
         });
 
-
-
+        
+        console.log('response', response)
         otpStore.setOtp(email, otp);
-
-
+        
+        
         return Response.success(res, "Reset OTP sent successfully");
     } catch (err) {
+        console.log('response', response)
         console.error("SEND OTP ERROR:", err);
         return Response.serverError(res, "Failed to send OTP email: " + err.message);
     }
