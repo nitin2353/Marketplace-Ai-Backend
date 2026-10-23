@@ -10,34 +10,40 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-
-transporter.verify((error, success) => {
-    if (error) {
-        console.error("❌ SMTP VERIFY ERROR:");
-        console.error(error);
-    } else {
+transporter.verify()
+    .then(() => {
         console.log("✅ SMTP SERVER READY");
-    }
-});
+    })
+    .catch((error) => {
+        console.error("❌ SMTP VERIFY ERROR:", {
+            code: error.code,
+            message: error.message,
+            command: error.command,
+            responseCode: error.responseCode,
+        });
+    });
 
 const sendMail = async ({ to, subject, html }) => {
     try {
-
         const mailOptions = {
-            from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL || 'nv5327260@gmail.com'
-                }>`,
+            from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL}>`,
             to,
             subject,
             html,
         };
 
-        await transporter.verify();
-        console.log("SMTP Connected");
-
         const response = await transporter.sendMail(mailOptions);
+
+        console.log("✅ Email sent:", response.messageId);
         return response;
     } catch (error) {
-        console.error("❌ SEND MAIL ERROR", error.message);
+        console.error("❌ SEND MAIL ERROR:", {
+            code: error.code,
+            message: error.message,
+            command: error.command,
+            responseCode: error.responseCode,
+        });
+
         throw error;
     }
 };
