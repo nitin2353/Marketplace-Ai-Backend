@@ -1,3 +1,4 @@
+
 const chatService = require("./chat.service");
 
 exports.getOrCreateConversation = async (req, res) => {
@@ -6,13 +7,27 @@ exports.getOrCreateConversation = async (req, res) => {
         const customer_id = req.user.id;
 
         if (!seller_id) {
-            return res.status(400).json({ status: false, message: "Seller ID is required" });
+            return res.status(400).json({
+                status: false,
+                message: "Seller ID is required",
+            });
         }
 
-        const conversation = await chatService.getOrCreateConversation(customer_id, seller_id, product_id);
-        res.status(200).json({ status: true, data: conversation });
+        const conversation = await chatService.getOrCreateConversation(
+            customer_id,
+            seller_id,
+            product_id
+        );
+
+        return res.status(200).json({
+            status: true,
+            data: conversation,
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        return res.status(500).json({
+            status: false,
+            message: error.message,
+        });
     }
 };
 
@@ -20,9 +35,16 @@ exports.getConversations = async (req, res) => {
     try {
         const userId = req.user.id;
         const conversations = await chatService.getConversations(userId);
-        res.status(200).json({ status: true, data: conversations });
+
+        return res.status(200).json({
+            status: true,
+            data: conversations,
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        return res.status(500).json({
+            status: false,
+            message: error.message,
+        });
     }
 };
 
@@ -30,10 +52,22 @@ exports.getMessages = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user.id;
+
         const messages = await chatService.getMessages(id, userId);
-        res.status(200).json({ status: true, data: messages });
+
+        return res.status(200).json({
+            status: true,
+            data: messages,
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        const statusCode =
+            error.message === "Access denied" ? 403 :
+                error.message === "Conversation not found" ? 404 : 500;
+
+        return res.status(statusCode).json({
+            status: false,
+            message: error.message,
+        });
     }
 };
 
@@ -44,7 +78,7 @@ exports.sendMessage = async (req, res) => {
         const senderId = req.user.id;
         const file = req.file;
 
-        if (!message && !file) {
+        if ((!message || !message.trim()) && !file) {
             return res.status(400).json({
                 status: false,
                 message: "Message or attachment is required",
@@ -53,14 +87,14 @@ exports.sendMessage = async (req, res) => {
 
         if (file) {
             const allowedTypes = [
-                'image/jpeg',
-                'image/png',
-                'image/gif',
-                'image/webp',
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain',
+                "image/jpeg",
+                "image/png",
+                "image/gif",
+                "image/webp",
+                "application/pdf",
+                "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/plain",
             ];
 
             if (!allowedTypes.includes(file.mimetype)) {
@@ -78,6 +112,7 @@ exports.sendMessage = async (req, res) => {
             }
         }
 
+        // Save the message and complete existing moderation/upload logic first.
         const newMessage = await chatService.sendMessage(
             id,
             senderId,
@@ -86,14 +121,31 @@ exports.sendMessage = async (req, res) => {
             aiConfirmed === "true" || aiConfirmed === true
         );
 
-        res.status(201).json({
+        // Notify connected users only after the message is saved successfully.
+        const io = req.app.io;
+
+        if (io) {
+            const payload = {
+                conversationId: String(id),
+                message: newMessage,
+            };
+
+            io.to(`conversation:${id}`).emit("chat:new_message", payload);
+        } else {
+            console.error("[Chat] Socket.IO instance not found on req.app.io");
+        }
+
+        return res.status(201).json({
             status: true,
             data: newMessage,
         });
     } catch (error) {
-        const statusCode = error.statusCode || 500;
+        const statusCode = error.statusCode || (
+            error.message === "Access denied" ? 403 :
+                error.message === "Conversation not found" ? 404 : 500
+        );
 
-        res.status(statusCode).json({
+        return res.status(statusCode).json({
             status: false,
             message: error.message,
             moderation: error.moderation || null,
@@ -105,10 +157,31 @@ exports.markAsRead = async (req, res) => {
     try {
         const { id } = req.params;
         const userId = req.user.id;
+
         await chatService.markConversationRead(id, userId);
-        res.status(200).json({ status: true, message: "Marked as read" });
+
+        const io = req.app.io;
+
+        if (io) {
+            io.to(`conversation:${id}`).emit("chat:read", {
+                conversationId: id,
+                userId,
+            });
+        }
+
+        return res.status(200).json({
+            status: true,
+            message: "Marked as read",
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        const statusCode =
+            error.message === "Access denied" ? 403 :
+                error.message === "Conversation not found" ? 404 : 500;
+
+        return res.status(statusCode).json({
+            status: false,
+            message: error.message,
+        });
     }
 };
 
@@ -116,10 +189,38 @@ exports.deleteMessage = async (req, res) => {
     try {
         const { messageId } = req.params;
         const userId = req.user.id;
-        await chatService.deleteMessage(messageId, userId);
-        res.status(200).json({ status: true, message: "Message deleted successfully" });
+
+        // Service validates ownership before deleting.
+        const deletedMessage = await chatService.deleteMessage(
+            messageId,
+            userId
+        );
+
+        const io = req.app.io;
+
+        if (io && deletedMessage) {
+            io.to(`conversation:${deletedMessage.conversation_id}`).emit(
+                "chat:message_deleted",
+                {
+                    messageId: deletedMessage.id,
+                    conversationId: deletedMessage.conversation_id,
+                }
+            );
+        }
+
+        return res.status(200).json({
+            status: true,
+            message: "Message deleted successfully",
+        });
     } catch (error) {
-        res.status(500).json({ status: false, message: error.message });
+        const statusCode =
+            error.message === "You can only delete your own messages" ? 403 :
+                error.message === "Message not found" ? 404 : 500;
+
+        return res.status(statusCode).json({
+            status: false,
+            message: error.message,
+        });
     }
 };
 
@@ -139,7 +240,11 @@ exports.moderateMessage = async (req, res) => {
             data: result,
         });
     } catch (error) {
-        return res.status(500).json({
+        const statusCode =
+            error.message === "Access denied" ? 403 :
+                error.message === "Conversation not found" ? 404 : 500;
+
+        return res.status(statusCode).json({
             status: false,
             message: error.message,
         });
