@@ -1,6 +1,6 @@
 require("dotenv").config();
 const nodemailer = require("nodemailer");
-
+const { Resend } = require("resend");
 
 const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -23,30 +23,33 @@ transporter.verify()
         });
     });
 
+
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 const sendMail = async ({ to, subject, html }) => {
     try {
-        const mailOptions = {
-            from: `"${process.env.MAIL_FROM_NAME || "ShopEase"}" <${process.env.MAIL_FROM_EMAIL}>`,
-            to,
+        const { data, error } = await resend.emails.send({
+            from: "ShopEase <onboarding@resend.dev>",
+            to: [to],
             subject,
             html,
-        };
-
-        const response = await transporter.sendMail(mailOptions);
-
-        console.log("✅ Email sent:", response.messageId);
-        return response;
-    } catch (error) {
-        console.error("❌ SEND MAIL ERROR:", {
-            code: error.code,
-            message: error.message,
-            command: error.command,
-            responseCode: error.responseCode,
         });
 
+        if (error) {
+            console.error("Email API error:", error);
+            throw new Error(error.message || "Email sending failed");
+        }
+
+        console.log("Email sent successfully:", data?.id);
+        return data;
+    } catch (error) {
+        console.error("SEND MAIL ERROR:", error.message);
         throw error;
     }
 };
+
+module.exports = sendMail;
 
 module.exports = {
     sendMail,
