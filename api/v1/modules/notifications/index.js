@@ -15,5 +15,3 @@ router.patch("/:notificationId/read", authMiddleware, notificationController.mar
 router.delete("/:notificationId", authMiddleware, notificationController.deleteNotification);
 
 module.exports = router;
-
-

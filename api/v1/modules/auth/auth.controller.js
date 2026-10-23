@@ -405,16 +405,12 @@ exports.deleteUser = async (req, res) => {
 
 exports.sendResetOtp = async (req, res) => {
     try {
-       
         const { email } = req.body;
-   
         const existingUser = await authModel.findUserByEmail(email);
-     
         if (!existingUser) return Response.notFound(res, "User not found");
 
         // Generate and send reset OTP
         const otp = Math.floor(100000 + Math.random() * 900000);
-   
         // Send OTP via email
         const response = await sendMail({
             to: existingUser.email,
@@ -433,10 +429,11 @@ exports.sendResetOtp = async (req, res) => {
                     </div>`
         });
 
+
         otpStore.setOtp(email, otp);
-        
-        
-        return Response.success(res, "Reset OTP sent successfully");
+
+
+        return Response.success(response, "Reset OTP sent successfully");
     } catch (err) {
         console.error("SEND OTP ERROR:", err);
         return Response.serverError(res, "Failed to send OTP email: " + err.message);
