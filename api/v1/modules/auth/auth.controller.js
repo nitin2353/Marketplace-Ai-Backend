@@ -433,7 +433,7 @@ exports.sendResetOtp = async (req, res) => {
         otpStore.setOtp(email, otp);
 
 
-        return Response.success(response, "Reset OTP sent successfully");
+        return Response.success(res, "Reset OTP sent successfully");
     } catch (err) {
         console.error("SEND OTP ERROR:", err);
         return Response.serverError(res, "Failed to send OTP email: " + err.message);
