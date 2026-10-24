@@ -21,15 +21,15 @@ exports.getOrCreateConversation = async (customerId, sellerId, productId) => {
 
         // Trigger notification for new customization request
 
-        // await notificationTrigger.triggerNotification({
-        //     receiver_id: sellerId,
-        //     receiver_type: 'seller',
-        //     type: 'NEW_CUSTOMIZATION_REQUEST',
-        //     title: 'New Customization Request',
-        //     body: 'A customer has started a conversation regarding a product customization.',
-        //     ref_type: 'chat',
-        //     ref_id: conversation.id
-        // });
+        await notificationTrigger.triggerNotification({
+            receiver_id: sellerId,
+            receiver_type: 'seller',
+            type: 'NEW_CUSTOMIZATION_REQUEST',
+            title: 'New Customization Request',
+            body: 'A customer has started a conversation regarding a product customization.',
+            ref_type: 'chat',
+            ref_id: conversation.id
+        });
     }
     return conversation;
 };

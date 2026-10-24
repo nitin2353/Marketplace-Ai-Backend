@@ -18,6 +18,7 @@ const notification = require("../api/v1/modules/notifications");
 const review = require('../api/v1/modules/review');
 const user = require('../api/v1/modules/user');
 const chat = require('../api/v1/modules/chat');
+const sellerAdminRoutes = require("../api/v1/modules/admin/sellerAdminRoutes");
 
 const returns = require('../api/v1/modules/returns');
 
@@ -38,7 +39,8 @@ router.use('/requirement', requirement)
     .use("/notification", notification)
     .use('/user', user)
     .use('/chat', chat)
-    .use('/returns', returns);
+    .use('/returns', returns)
+    .use("/admin", sellerAdminRoutes);
 
 
 module.exports = router;
