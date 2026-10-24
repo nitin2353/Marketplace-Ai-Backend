@@ -9,3 +9,4 @@ router.get("/sellers",adminController.getSellers);
 router.patch("/sellers/:id/status",adminController.updateSellerStatus);
 
 module.exports = router;
+    

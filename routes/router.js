@@ -18,7 +18,7 @@ const notification = require("../api/v1/modules/notifications");
 const review = require('../api/v1/modules/review');
 const user = require('../api/v1/modules/user');
 const chat = require('../api/v1/modules/chat');
-const AdminRoutes = require("../api/v1/modules/admin");
+const adminRoutes = require("../api/v1/modules/admin");
 
 const returns = require('../api/v1/modules/returns');
 
@@ -40,7 +40,7 @@ router.use('/requirement', requirement)
     .use('/user', user)
     .use('/chat', chat)
     .use('/returns', returns)
-    .use("/admin", AdminRoutes);
+    .use("/admin", adminRoutes);
 
 
 module.exports = router;
