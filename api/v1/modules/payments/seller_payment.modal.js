@@ -11,6 +11,7 @@ exports.getSellerSummary = async (sellerId) => {
                 COALESCE(SUM(CASE WHEN (settlement_status = 'pending' OR settlement_status = 'eligible') AND (o.payment_status = 'paid' OR o.order_status = 'delivered') THEN seller_earning ELSE 0 END), 0) as available_balance,
                 COALESCE(SUM(CASE WHEN settlement_status = 'pending' AND o.payment_status = 'pending' AND o.order_status != 'delivered' AND o.order_status != 'cancelled' THEN seller_earning ELSE 0 END), 0) as pending_balance,
                 COALESCE(SUM(CASE WHEN settlement_status IN ('cancelled', 'refunded') THEN COALESCE(NULLIF(refund_amount, 0), amount, 0) ELSE refund_amount END), 0) as refunded_amount,
+                COALESCE(SUM(seller_amount)) AS settlement_amount,
                 COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', CURRENT_TIMESTAMP) AND settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as monthly_earning,
                 COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', CURRENT_TIMESTAMP) AND settlement_status NOT IN ('cancelled', 'refunded') THEN seller_earning ELSE 0 END), 0) as today_earning,
                 COUNT(DISTINCT order_id) as total_orders
