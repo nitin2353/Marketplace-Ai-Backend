@@ -200,3 +200,179 @@ exports.updateSellerStatus = async (sellerId, status) => {
 
     return result.rows[0] || null;
 };
+
+exports.getSellerDetails = async (sellerId) => {
+    // Fetch the seller's profile.
+    const sellerQuery = `
+        SELECT
+            u.id AS seller_id,
+            u.name,
+            u.first_name,
+            u.last_name,
+            u.email,
+            u.phone,
+            u.gender,
+            u.created_at AS seller_created_at,
+            u.business_name,
+            u.dob,
+            u.bio,
+            u.website,
+            u.avatar,
+            u.business_type,
+            u.gstin,
+            u.pan,
+            u.store_description,
+            u.address_line_1,
+            u.city,
+            u.state,
+            u.pincode,
+            u.country,
+            u.bank_name,
+            u.account_holder,
+            u.account_number,
+            u.ifsc,
+            u.account_type,
+            u.upi_id,
+            u.status
+        FROM public.users u
+        WHERE u.id::text = $1
+          AND LOWER(u.role) = 'seller'
+        LIMIT 1
+    `;
+
+    const sellerResult = await pool.query(sellerQuery, [sellerId]);
+
+    if (!sellerResult.rows.length) {
+        return null;
+    }
+
+    const seller = sellerResult.rows[0];
+
+    // Fetch orders linked to this seller through payments.
+    // orders has no seller_id column in the schema provided.
+    const ordersQuery = `
+        SELECT
+            o.id,
+            o.order_number,
+            o.user_id AS buyer_id,
+            o.address_id,
+            o.total_items,
+            o.total_quantity,
+            o.subtotal,
+            o.delivery_charge,
+            o.discount_amount,
+            o.tax_amount,
+            o.total_amount,
+            o.payment_method,
+            o.payment_status,
+            o.payment_gateway,
+            o.razorpay_order_id,
+            o.razorpay_payment_id,
+            o.order_status,
+            o.notes,
+            o.created_time,
+            o.modified_time,
+            COALESCE(
+                SUM(p.amount),
+                0
+            ) AS seller_payment_amount,
+            COALESCE(
+                SUM(p.seller_earning),
+                0
+            ) AS seller_earning,
+            COALESCE(
+                SUM(p.platform_fee),
+                0
+            ) AS platform_fee,
+            COALESCE(
+                SUM(p.refund_amount),
+                0
+            ) AS refund_amount,
+            COUNT(p.id)::int AS payment_records
+        FROM public.payments p
+        INNER JOIN public.orders o
+            ON o.id = p.order_id
+        WHERE p.seller_id::text = $1
+        GROUP BY o.id
+        ORDER BY o.created_time DESC NULLS LAST
+    `;
+
+    const paymentsQuery = `
+        SELECT
+            p.id,
+            p.order_id,
+            o.order_number,
+            p.amount,
+            p.status,
+            p.payment_method,
+            p.created_at,
+            p.platform_fee,
+            p.seller_amount,
+            p.seller_earning,
+            p.settlement_status,
+            p.settlement_date,
+            p.refund_amount,
+            p.seller_id
+        FROM public.payments p
+        INNER JOIN public.orders o
+            ON o.id = p.order_id
+        WHERE p.seller_id::text = $1
+        ORDER BY p.created_at DESC NULLS LAST
+    `;
+
+    const [ordersResult, paymentsResult] = await Promise.all([
+        pool.query(ordersQuery, [sellerId]),
+        pool.query(paymentsQuery, [sellerId]),
+    ]);
+
+    return {
+        seller,
+        orders: ordersResult.rows,
+        payments: paymentsResult.rows,
+    };
+};
+
+exports.updatePaymentStatus = async (paymentId, status) => {
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const result = await client.query(
+            `UPDATE public.payments
+     SET
+         seller_amount = seller_earning,
+         settlement_date = NOW()
+     WHERE id::text = $1
+     RETURNING
+         id,
+         order_id,
+         amount,
+         status,
+         payment_method,
+         created_at,
+         platform_fee,
+         seller_amount,
+         seller_earning,
+         settlement_status,
+         settlement_date,
+         refund_amount,
+         seller_id`,
+            [paymentId]
+        );
+
+        if (result.rowCount === 0) {
+            await client.query("ROLLBACK");
+            return null;
+        }
+
+        await client.query("COMMIT");
+
+        return result.rows[0];
+    } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+    } finally {
+        client.release();
+    }
+};
