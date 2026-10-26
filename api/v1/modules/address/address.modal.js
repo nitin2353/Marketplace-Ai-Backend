@@ -119,7 +119,7 @@ const getAddressById = async (id, user_id) => {
             WHERE id = $1 AND user_id = $2
         `;
         const result = await pool.query(query, [id, user_id]);
-        console.log("query" ,result)
+  
         return result.rows[0];
     } catch (error) {
         throw error;

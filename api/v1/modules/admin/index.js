@@ -7,7 +7,7 @@ router.get("/sellers", authMiddleware, adminController.getSellers);
 
 router.get("/sellers/:id/details", authMiddleware, adminController.getSellerDetails);
 
-router.patch("/sellers/:id/status", authMiddleware, adminController.updateSellerStatus);
+router.patch("/sellers/:id/status", adminController.updateSellerStatus);
 
 router.patch("/payments/:paymentId/status", authMiddleware, adminController.updatePaymentStatus);
 

@@ -20,7 +20,7 @@ exports.updateSellerStatus = async (req, res) => {
         const status = String(req.body.status || "")
             .trim()
             .toLowerCase();
-
+        
         if (!sellerId) {
             return ResponseManager.badRequest(res, "Seller ID is required");
         }
@@ -99,8 +99,7 @@ exports.updatePaymentStatus = async (req, res) => {
                 message: "Invalid payment status.",
             });
         }
-        console.log(paymentId,
-            normalizedStatus)
+  
         const payment = await adminModel.updatePaymentStatus(
             paymentId,
             normalizedStatus

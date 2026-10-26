@@ -327,10 +327,6 @@ exports.createOrderFromCart = async ({
             sellerGroups[sellerId].push(item);
         }
 
-        console.log(
-            "Seller Groups:",
-            Object.keys(sellerGroups)
-        );
 
         // ============================================================
         // 6. PAYMENT CONFIG

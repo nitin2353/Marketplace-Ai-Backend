@@ -22,8 +22,6 @@ const setOtp = (email, otp) => {
 
     otpStore.set(key, otpData);
 
-    console.log("OTP SAVED KEY:", key);
-    console.log("FULL STORE AFTER SAVE:", Array.from(otpStore.entries()));
 
     return otpData;
 };
@@ -31,14 +29,11 @@ const setOtp = (email, otp) => {
 const getOtp = (email) => {
     const key = normalizeEmail(email);
 
-    console.log("GET OTP KEY:", key);
-    console.log("FULL STORE BEFORE GET:", Array.from(otpStore.entries()));
 
     if (!key) return null;
 
     const otpData = otpStore.get(key);
 
-    console.log("GET OTP DATA:", otpData);
 
     if (!otpData) return null;
 

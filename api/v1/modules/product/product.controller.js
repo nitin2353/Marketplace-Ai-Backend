@@ -81,7 +81,6 @@ const handleGetProductById = async (req, res) => {
 
 const createProduct = async (req, res) => {
     try {
-        console.log(req.body);
         const data = req.body;
         const userId = req.user?.id;
 
@@ -99,7 +98,6 @@ const createProduct = async (req, res) => {
         data.imageUrls = imageUrls;
         data.userId = userId;
 
-        console.log(data);
 
         const product = await productModel.createProduct(data);
 
@@ -313,7 +311,6 @@ const handleDeleteProduct = async (req, res) => {
 
         const deletedRecord = await productModel.deleteById(id);
 
-        console.log("Deleted product record:", deletedRecord);
 
 
         return Response.success(res, "Product deleted successfully", deletedRecord);

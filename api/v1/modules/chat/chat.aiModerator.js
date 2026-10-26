@@ -113,7 +113,6 @@ message: "${message.replace(/"/g, '\\"')}"
 
     const parsed = JSON.parse(cleanText);
     
-    console.log('response', parsed)
     return {
       blocked: Boolean(parsed.blocked),
       warning: Boolean(parsed.warning),

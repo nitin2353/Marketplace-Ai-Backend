@@ -92,7 +92,6 @@ exports.handleWebhook = async (req, res) => {
             );
 
             if (existing.rows.length > 0) {
-                console.log("⚠️ Payment already processed");
                 return res.json({ status: "already processed" });
             }
 

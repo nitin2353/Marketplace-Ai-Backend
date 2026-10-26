@@ -517,11 +517,6 @@ exports.verifyAndCreateOrder = async ({
             sellerGroups[sellerId].push(item);
         }
 
-        console.log(
-            "Razorpay Seller Groups:",
-            Object.keys(sellerGroups)
-        );
-
         // ============================================================
         // 8. CALCULATE TOTAL CART SUBTOTAL
         // ============================================================

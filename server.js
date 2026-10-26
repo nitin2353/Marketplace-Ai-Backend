@@ -130,17 +130,11 @@ io.on("connection", (socket) => {
             const conversationId = data?.conversationId;
             const userId = socket.data.user?.id;
 
-            console.log("[Chat] Join requested:", {
-                socketId: socket.id,
-                userId,
-                conversationId,
-            });
-
             if (
                 typeof conversationId !== "string" ||
                 !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)
             ) {
-                console.log("[Chat] Invalid conversation ID:", conversationId);
+               
 
                 return callback?.({
                     status: false,

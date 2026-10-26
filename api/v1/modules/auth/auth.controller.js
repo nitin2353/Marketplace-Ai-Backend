@@ -407,7 +407,9 @@ exports.sendResetOtp = async (req, res) => {
     try {
         const { email } = req.body;
         const existingUser = await authModel.findUserByEmail(email);
+
         if (!existingUser) return Response.notFound(res, "User not found");
+        if (existingUser.role == 'admin') return Response.notFound(res, "Email not Authorized");
 
         // Generate and send reset OTP
         const otp = Math.floor(100000 + Math.random() * 900000);

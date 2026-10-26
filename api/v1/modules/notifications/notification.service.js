@@ -47,7 +47,6 @@ exports.createNotification = async (payload) => {
         
         // If preference is explicitly false, skip creation
         if (prefs[prefKey] === false) {
-            console.log(`Notification skipped for user ${payload.receiver_id} (${role}) due to preference: ${prefKey}`);
             return null;
         }
     }
