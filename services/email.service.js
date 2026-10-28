@@ -17,7 +17,7 @@ const emailService = async ({ to, bccAddress, ccAddress, subject, messageBody, b
         });
 
         const mailOptions = {
-            from: `Ratan Textile: <${process.env.SMTP_SENDER_EMAIL}>`,
+            from: `FlashiBuy: <${process.env.SMTP_SENDER_EMAIL}>`,
             to: to,
             bcc: bccAddress,
             cc: ccAddress,

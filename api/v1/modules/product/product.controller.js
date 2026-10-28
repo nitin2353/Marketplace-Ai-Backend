@@ -303,11 +303,11 @@ const handleDeleteProduct = async (req, res) => {
             return Response.badRequest(res, "Product not found");
         }
 
-        const deletableUrls = UTILS.normalizeProductImages(product.image_url);
+        // const deletableUrls = UTILS.normalizeProductImages(product.image_url);
 
-        if (deletableUrls.length > 0) {
-            await UTILS.removeMultiple(deletableUrls);
-        }
+        // if (deletableUrls.length > 0) {
+        //     await UTILS.removeMultiple(deletableUrls);
+        // }
 
         const deletedRecord = await productModel.deleteById(id);
 

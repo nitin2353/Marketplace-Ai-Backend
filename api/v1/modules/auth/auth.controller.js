@@ -48,7 +48,7 @@ exports.customerRregister = async (req, res) => {
         const token = jwt.sign(
             { id: user.id, role: user.role, email: user.email },
             process.env.JWT_SECRET_KEY,
-            { expiresIn: "5h" }
+            { expiresIn: process.env.JWT_EXPIRE_IN }
         );
 
         return Response.created(res, "Account successfully created", {
@@ -156,7 +156,7 @@ exports.registerSeller = async (req, res) => {
                 email: user.email
             },
             process.env.JWT_SECRET_KEY,
-            { expiresIn: "5h" }
+            { expiresIn: process.env.JWT_EXPIRE_IN }
         );
 
         return Response.created(
@@ -218,7 +218,7 @@ exports.login = async (req, res) => {
                 business_name: user.business_name
             },
             process.env.JWT_SECRET_KEY,
-            { expiresIn: "5h" }
+            { expiresIn: process.env.JWT_EXPIRE_IN }
         );
 
         return Response.success(res, "Login successful", {
