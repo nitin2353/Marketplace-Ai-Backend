@@ -32,6 +32,7 @@ const corsOptions = {
     allowedHeaders: [
         "Content-Type",
         "Authorization",
+        "shiprocketToken",
         "X-Requested-With",
         "Accept",
         "Origin",

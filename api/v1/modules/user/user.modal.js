@@ -2,7 +2,7 @@ const pool = require("../../../../config/database");
 
 const findUserById = async (id) => {
     const result = await pool.query(
-        "SELECT id, name, email, phone, gender, role, first_name, last_name, dob, bio, website, avatar, business_name, business_type, gstin, pan, store_description, address_line_1, city, state, pincode, country, bank_name, account_holder, account_number, ifsc, account_type, upi_id, notification_preferences FROM users WHERE id = $1",
+        "SELECT id, name, email, phone, gender, role, first_name, last_name, dob, bio, website, avatar, business_name, business_type, gstin, pan, store_description, address_line_1, city, state, pincode, country, bank_name, account_holder, account_number, ifsc, account_type, upi_id, pickup_serviceable, notification_preferences FROM users WHERE id = $1",
         [id]
     );
     return result.rows[0];
@@ -44,15 +44,16 @@ const updateStore = async (id, data) => {
         `UPDATE users SET
           business_name = COALESCE(NULLIF($1, ''), business_name),
           business_type = COALESCE(NULLIF($2, ''), business_type),
-          gstin = COALESCE(NULLIF($3, ''), gstin),
+          gstin = $3,
           pan = COALESCE(NULLIF($4, ''), pan),
           store_description = COALESCE(NULLIF($5, ''), store_description),
           address_line_1 = COALESCE(NULLIF($6, ''), address_line_1),
           city = COALESCE(NULLIF($7, ''), city),
           state = COALESCE(NULLIF($8, ''), state),
           pincode = COALESCE(NULLIF($9, ''), pincode),
-          country = COALESCE(NULLIF($10, ''), country)
-        WHERE id = $11
+          country = COALESCE(NULLIF($10, ''), country),
+          pickup_serviceable = $11
+        WHERE id = $12
         RETURNING *`,
         [
             data.business_name,
@@ -65,11 +66,14 @@ const updateStore = async (id, data) => {
             data.state,
             data.pincode,
             data.country,
+            data.pickup_serviceable,
             id
         ]
     );
+
     return result.rows[0];
 };
+
 
 const updatePayment = async (id, data) => {
     const result = await pool.query(

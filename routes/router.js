@@ -19,8 +19,8 @@ const review = require('../api/v1/modules/review');
 const user = require('../api/v1/modules/user');
 const chat = require('../api/v1/modules/chat');
 const adminRoutes = require("../api/v1/modules/admin");
-
 const returns = require('../api/v1/modules/returns');
+const shipment = require('../api/v1/modules/shiprocket')
 
 router.use('/requirement', requirement)
     .use('/quote', quote)
@@ -40,7 +40,8 @@ router.use('/requirement', requirement)
     .use('/user', user)
     .use('/chat', chat)
     .use('/returns', returns)
-    .use("/admin", adminRoutes);
+    .use("/admin", adminRoutes)
+    .use("/shiprocket/services", shipment);
 
 
 module.exports = router;

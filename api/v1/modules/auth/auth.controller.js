@@ -5,6 +5,7 @@ const authModel = require("./auth.modal");
 const { sendMail } = require("../../../../config/mail.config");
 const otpStore = require("../../../../config/otp.store");
 const UTILS = require("../../../../utils/global");
+const { getShiprocketToken } = require("../../../../services/shiprocket.service");
 
 
 // ── CUSTOMER REGISTER ────────────────────────────────────────────────────────
@@ -72,8 +73,8 @@ exports.customerRregister = async (req, res) => {
 
 exports.registerSeller = async (req, res) => {
     try {
-        const { name, email, password, phone, business_name } = req.body;
-
+        const { name, email, password, phone, business_name, pickup_serviceable } = req.body;
+       
         // Required field validation
         if (!email) {
             return Response.badRequest(res, "Email is required");
@@ -135,6 +136,7 @@ exports.registerSeller = async (req, res) => {
             first_name,
             last_name,
             password: hashedPassword,
+            pickup_serviceable,
             seller_signature,
             role: "seller",
             status: "active",
@@ -168,7 +170,8 @@ exports.registerSeller = async (req, res) => {
                     name: user.name,
                     email: user.email,
                     role: user.role,
-                    business_name: user.business_name
+                    business_name: user.business_name,
+                    pickup_serviceable: user.pickup_serviceable
                 },
                 token
             }
@@ -207,6 +210,10 @@ exports.login = async (req, res) => {
         if (!valid) {
             return Response.badRequest(res, "Invalid credentials");
         }
+
+
+        // const shiprocketToken = await getShiprocketToken();
+
 
         // Generate Token (Safe Payload - NO PASSWORD)
         const token = jwt.sign(

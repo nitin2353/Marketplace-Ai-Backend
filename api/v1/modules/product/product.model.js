@@ -142,11 +142,13 @@ const getProductById = async (id) => {
             GROUP BY p.id;
         `;
 
-        const userQuery = `SELECT u.name FROM public.products p
+        const userQuery = `SELECT u.name, u.pincode FROM public.products p
             INNER JOIN public.users u 
             ON u.id = p.seller_id
             WHERE p.id = $1;`
         const user_record = await pool.query(userQuery, [id])
+
+
         const records = await pool.query(query, [id]);
         const record = records.rows[0];
         if (record && record.actual_sold !== undefined) {
