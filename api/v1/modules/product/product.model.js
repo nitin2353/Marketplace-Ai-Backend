@@ -83,7 +83,7 @@ const getAllProducts = async (role = "customer", id = "") => {
                         '[]'
                     ) AS variants
                 FROM products p
-                INNER JOIN users u ON u.id = p.seller_id
+                INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true
                 LEFT JOIN product_variants v ON v.product_id = p.id
                 WHERE (
                     p.status = 'true'
@@ -610,7 +610,7 @@ const handleFindByQueryModel = async ({ q, limit, offset }) => {
         ) AS search_score
     FROM public.products p
     INNER JOIN public.users u
-        ON u.id = p.seller_id
+        ON u.id = p.seller_id AND u.pickup_serviceable = true
     WHERE
         LOWER(u.status::TEXT) IN ('active', 'true')
         AND (
@@ -676,9 +676,9 @@ const handleFindByQueryModel = async ({ q, limit, offset }) => {
 const handleFindListByQueryModel = async ({ q, limit, offset }) => {
     const query = `
         SELECT DISTINCT keyword FROM (
-        SELECT title AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id WHERE u.status = 'active' AND title ILIKE '%' || $1 || '%'
+        SELECT title AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true WHERE u.status = 'active' AND title ILIKE '%' || $1 || '%'
         UNION
-        SELECT category AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id WHERE u.status = 'active' AND category ILIKE '%' || $1 || '%'
+        SELECT category AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true WHERE u.status = 'active' AND category ILIKE '%' || $1 || '%'
         ) AS suggestions
         LIMIT $2;
   `;
@@ -726,7 +726,7 @@ const getCategorySections = async () => {
                     '[]'
                 ) AS variants
             FROM products p
-            INNER JOIN users u ON u.id = p.seller_id
+            INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true
             LEFT JOIN product_variants v ON v.product_id = p.id
             WHERE (p.status = 'active' OR p.status = 'true' OR p.status = '1') AND u.status = 'active'
         `;

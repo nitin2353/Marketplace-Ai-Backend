@@ -1,12 +1,14 @@
 const pool = require("../../../../config/database");
+const { addPickupAddress } = require("../shiprocket/shiprocket.controller");
 
 // ── CREATE USER (Unified for Customer & Seller) ──────────────────────────
+
 const createUser = async (data) => {
     const {
         name,
         email,
         password,
-        role = 'customer',
+        role = "customer",
         first_name,
         last_name,
         phone,
@@ -33,10 +35,10 @@ const createUser = async (data) => {
         upi_id,
         notify = true,
         notification_preferences = {},
-        status = 'active',
+        status = "active",
         seller_signature
     } = data;
-    
+
     const query = `
         INSERT INTO public.users (
             name, email, password, role, first_name, last_name, phone, gender,
@@ -57,17 +59,45 @@ const createUser = async (data) => {
 
     const values = [
         name, email, password, role, first_name, last_name, phone, gender || null,
-        dob || null, bio || null, website || null, business_name || null, business_type || null, 
-        gstin || null, pan || null, store_description || null,
-        address_line_1 || null, city || null, state || null, pincode || null, country || null,
-        bank_name || null, account_holder || null, account_number || null, ifsc || null, account_type || null, upi_id || null,
+        dob || null, bio || null, website || null, business_name || null,
+        business_type || null, gstin || null, pan || null, store_description || null,
+        address_line_1 || null, city || null, state || null, pincode || null,
+        country || null, bank_name || null, account_holder || null,
+        account_number || null, ifsc || null, account_type || null, upi_id || null,
         notify, JSON.stringify(notification_preferences), status,
-        seller_signature || null, pickup_serviceable
+        seller_signature || null, pickup_serviceable ?? null
     ];
 
+    // 1. First create the user in the database.
     const result = await pool.query(query, values);
-    return result.rows[0];
+
+    const user = result.rows[0];
+
+    // 2. Register a pickup address only for sellers with a complete address.
+    if (
+        user.role === "seller" &&
+        address_line_1 &&
+        city &&
+        state &&
+        pincode &&
+        country &&
+        name &&
+        email &&
+        phone
+    ) {
+        try {
+            await addPickupAddress(data);
+        } catch (error) {
+            console.error(
+                "Shiprocket pickup address registration failed:",
+                error.response?.data || error.message
+            );
+        }
+    }
+
+    return user;
 };
+
 
 const findUserByEmail = async (email, activeOnly = false) => {
     let query = "SELECT * FROM public.users WHERE email = $1";
