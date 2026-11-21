@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const Razorpay = require("razorpay");
 const notificationTriggers = require("../notifications/notification.trigger");
 const sellerPaymentModal = require("./seller_payment.modal");
+const { createDelhiveryOrder } = require("../delhivery/delhivery.controller");
 
 const razorpay = new Razorpay({
     key_id: 'rzp_test_SZiKye10gyvfN1',
@@ -216,7 +217,7 @@ exports.verifyAndCreateOrder = async ({
     created_by = null,
     modified_by = null,
     cart_items = null // Buy Now
-}) => {
+}, data) => {
 
     // ============================================================
     // 1. VERIFY RAZORPAY SIGNATURE
@@ -619,10 +620,8 @@ exports.verifyAndCreateOrder = async ({
             // ========================================================
             // 9.3 DELIVERY CHARGE
             // ========================================================
-
-            const sellerDeliveryCharge =
-                cartSubtotal <= 499 && !isDeliveryChargesAdded
-                    ? 49
+            const sellerDeliveryCharge = !isDeliveryChargesAdded
+                    ? data?.delivery_charge?.shippingCharge
                     : 0;
 
             // ========================================================
@@ -745,7 +744,7 @@ exports.verifyAndCreateOrder = async ({
             const order =
                 orderRes.rows[0];
 
-            
+
             // ========================================================
             // 10. INSERT ORDER ITEMS
             // ========================================================
@@ -991,7 +990,7 @@ exports.verifyAndCreateOrder = async ({
 
             createdOrders.push(order);
         }
-        
+
 
         // ============================================================
         // 15. DELETE CART
@@ -1054,41 +1053,64 @@ exports.verifyAndCreateOrder = async ({
                 .catch(console.error);
         }
 
+
+        const order_ids = createdOrders?.map(order => ({
+            id: order.id
+        })) || [];
+
         // ============================================================
         // 19. RETURN RESPONSE
         // ============================================================
 
-        return {
-            // All seller-wise orders
-            orders: createdOrders,
+        try {
+            const response = await createDelhiveryOrder(data, order_ids);
 
-            // Backward compatibility
-            order: createdOrders[0] || null,
+            return {
+                success: response.success,
+                // All seller-wise orders
+                orders: createdOrders,
 
-            orders_count:
-                createdOrders.length,
+                // Backward compatibility
+                order: createdOrders[0] || null,
 
-            items_count:
-                cartItems.length,
+                orders_count:
+                    createdOrders.length,
 
-            payment_status: "paid",
+                items_count:
+                    cartItems.length,
 
-            order_status: "confirmed",
+                payment_status: "paid",
 
-            razorpay_payment_id:
-                payment_id,
+                order_status: "confirmed",
 
-            razorpay_order_id:
-                payment_order_id,
+                razorpay_payment_id:
+                    payment_id,
 
-            total_amount: Number(
-                grandTotalAmount.toFixed(2)
-            ),
+                razorpay_order_id:
+                    payment_order_id,
 
-            payment_method,
+                total_amount: Number(
+                    grandTotalAmount.toFixed(2)
+                ),
 
-            coupon_code
-        };
+                payment_method,
+
+                coupon_code
+            };
+
+        } catch (shipmentError) {
+            console.error(
+                `Delhivery shipment failed :`,
+                shipmentError
+            );
+
+            return {
+                success: false,
+                message: "Shipment creation failed",
+                error: shipmentError.message
+            };
+        }
+
 
     } catch (error) {
         await client.query("ROLLBACK");

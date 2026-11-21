@@ -20,11 +20,24 @@ const getProductCategories = async (req, res) => {
          return Response.success(res, "Categories fetched successfully", data.rows);
     } catch (error) {
         console.error(error);
-        return Response.serverError(res, error.message || "Upload failed");
+        return Response.serverError(res, error.message || "Categories fetched failed");
+    }
+}
+
+const getPickupScheduledDate = async (req, res) => {
+    try {
+        const {id} = req.user;
+        const data = await globaModal.pickupScheduledDate(id);
+         return Response.success(res, "Scheduled Date fetched successfully", data.rows);
+    } catch (error) {
+        console.error(error);
+        return Response.serverError(res, error.message || "cheduled Date fetched failed");
     }
 }
 
 
 
 
-module.exports = { uploadImages, getProductCategories }
+
+
+module.exports = { uploadImages, getProductCategories, getPickupScheduledDate }

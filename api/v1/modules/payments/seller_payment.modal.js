@@ -181,11 +181,11 @@ exports.recordOrderPayments = async (orderId) => {
         await client.query('BEGIN');
         
         // 1. Get order details and items
-        const orderRes = await client.query('SELECT * FROM public.orders WHERE id = $1', [orderId]);
+        const orderRes = await pool.query('SELECT * FROM public.orders WHERE id = $1', [orderId]);
         if (orderRes.rows.length === 0) throw new Error("Order not found");
         const order = orderRes.rows[0];
         
-        const itemsRes = await client.query(`
+        const itemsRes = await pool.query(`
             SELECT oi.line_total, p.seller_id
             FROM public.order_items oi
             JOIN public.products p ON p.id = oi.product_id
@@ -200,40 +200,44 @@ exports.recordOrderPayments = async (orderId) => {
             }
             sellerEarnings[item.seller_id] += Number(item.line_total);
         });
+
         
+        const seller_delivery_charges = orderRes?.rows[0]?.total_quantity * 49 || 0;
+
         // 3. Create payment records for each seller
         for (const [sellerId, revenue] of Object.entries(sellerEarnings)) {
             const platformFee = revenue * 0.1; // 10% platform fee
             const sellerEarning = revenue - platformFee;
             
             // Check if already exists
-            const existing = await client.query(
+            const existing = await pool.query(
                 'SELECT id FROM public.payments WHERE order_id = $1 AND seller_id = $2',
                 [orderId, sellerId]
             );
             
             if (existing.rows.length > 0) {
-                await client.query(`
+                await pool.query(`
                     UPDATE public.payments 
                     SET amount = $3, platform_fee = $4, seller_earning = $5, 
                         payment_method = $6, status = $7
                     WHERE id = $1
                 `, [existing.rows[0].id, revenue, platformFee, sellerEarning, order.payment_method, order.payment_status === 'paid' ? 'paid' : 'pending']);
             } else {
-                await client.query(`
+                await pool.query(`
                     INSERT INTO public.payments (
                         order_id, seller_id, amount, platform_fee, seller_earning, 
-                        payment_method, status, settlement_status
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        payment_method, status, settlement_status, seller_delivery_charges
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 `, [
                     orderId, 
                     sellerId, 
                     revenue, 
                     platformFee, 
-                    sellerEarning, 
+                    sellerEarning - seller_delivery_charges || 0, 
                     order.payment_method, 
                     order.payment_status === 'paid' ? 'paid' : 'pending',
-                    'pending'
+                    'pending',
+                    seller_delivery_charges
                 ]);
             }
         }

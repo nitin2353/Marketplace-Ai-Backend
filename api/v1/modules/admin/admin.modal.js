@@ -12,6 +12,7 @@ exports.getAllSellers = async () => {
             COALESCE(p.seller_amount, 0) AS seller_amount,
             COALESCE(p.seller_earning, 0) AS seller_earning,
             COALESCE(p.platform_fee, 0) AS platform_fee,
+            COALESCE(p.seller_delivery_charges, 0) AS seller_delivery_charges,
             COALESCE(p.refund_amount, 0) AS refund_amount,
             LOWER(COALESCE(p.settlement_status, 'pending'))
                 AS settlement_status,
@@ -78,6 +79,7 @@ exports.getAllSellers = async () => {
 
             COALESCE(SUM(seller_amount), 0) AS total_seller_amount,
             COALESCE(SUM(platform_fee), 0) AS total_platform_fee,
+            COALESCE(SUM(seller_delivery_charges), 0) AS seller_delivery_charges,
 
             COUNT(*) AS total_payment_records,
 
@@ -152,6 +154,7 @@ exports.getAllSellers = async () => {
         COALESCE(ps.total_seller_amount, 0) AS total_seller_amount,
         COALESCE(sd.total_discount_amount, 0) AS total_discount_amount,
         COALESCE(ps.total_platform_fee, 0) AS total_platform_fee,
+        COALESCE(ps.seller_delivery_charges, 0) AS seller_delivery_charges,
         COALESCE(ps.total_payment_records, 0) AS total_payment_records,
         COALESCE(ps.successful_payment_records, 0)
             AS successful_payment_records,
@@ -285,6 +288,10 @@ exports.getSellerDetails = async (sellerId) => {
                 0
             ) AS platform_fee,
             COALESCE(
+                SUM(p.seller_delivery_charges),
+                0
+            ) AS seller_delivery_charges,
+            COALESCE(
                 SUM(p.refund_amount),
                 0
             ) AS refund_amount,
@@ -309,6 +316,7 @@ exports.getSellerDetails = async (sellerId) => {
             p.platform_fee,
             p.seller_amount,
             p.seller_earning,
+            p.seller_delivery_charges,
             p.settlement_status,
             p.settlement_date,
             p.refund_amount,

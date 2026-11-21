@@ -140,7 +140,7 @@ exports.verifyAndCreateOrder = async (req, res) => {
             created_by,
             modified_by,
             cart_items // Added for Buy Now
-        });
+        }, req.body);
 
         return res.status(201).json({
             success: true,

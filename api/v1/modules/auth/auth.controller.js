@@ -5,7 +5,7 @@ const authModel = require("./auth.modal");
 const { sendMail } = require("../../../../config/mail.config");
 const otpStore = require("../../../../config/otp.store");
 const UTILS = require("../../../../utils/global");
-const { getShiprocketToken } = require("../../../../services/shiprocket.service");
+const { getShiprocketToken } = require("../../../../services/delhivery.service");
 
 
 // ── CUSTOMER REGISTER ────────────────────────────────────────────────────────

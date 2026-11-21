@@ -2,6 +2,11 @@ const pool = require("../../../../config/database");
 const crypto = require("crypto");
 const notificationTriggers = require("../notifications/notification.trigger");
 const sellerPaymentModal = require("../payments/seller_payment.modal");
+const { createDelhiveryOrder } = require("../delhivery/delhivery.controller");
+const { cancelShipment } = require("../../../../services/delhivery.service");
+const { default: axios } = require("axios");
+const { error } = require("console");
+const { success } = require("../response");
 
 
 const generateOrderNumber = () => {
@@ -11,13 +16,13 @@ const generateOrderNumber = () => {
 };
 
 
-exports.buyNow = async ({ product_id, variant_id, quantity }) => {
+exports.buyNow = async ({ product_id, variant_id, quantity }, data) => {
     try {
         const productRes = await pool.query(
             `
             SELECT 
-                p.id, p.title, p.base_price, p.image_url, p.seller_id, p.stock, p.status,
-                u.status as seller_status
+                p.id, p.title, p.base_price, p.image_url, p.seller_id, p.stock, p.status, p.height, p.length, p.width, p.weight,
+                u.status as seller_status, u.pincode, u.delhivery_pickup_address_id, u.delhivery_pickup_code
             FROM public.products p
             LEFT JOIN public.users u ON u.id = p.seller_id
             WHERE p.id = $1
@@ -73,12 +78,20 @@ exports.buyNow = async ({ product_id, variant_id, quantity }) => {
             items: [
                 {
                     product_id,
+                    seller_id: product?.seller_id,
+                    pincode: product?.pincode,
                     image_url: product?.image_url,
                     variant_id: variant_id || null,
                     title,
                     price,
                     quantity,
-                    total: subtotal
+                    total: subtotal,
+                    length: product.length,
+                    width: product.width,
+                    height: product.height,
+                    weight: product.weight,
+                    delhivery_pickup_address_id: product?.delhivery_pickup_address_id,
+                    delhivery_pickup_code: product.delhivery_pickup_code
                 }
             ],
             subtotal,
@@ -104,9 +117,10 @@ exports.createOrderFromCart = async ({
     payment_id,
     payment_signature,
     items = null // Buy Now
-}) => {
+}, data) => {
     const client = await pool.connect();
-
+    const createdOrders = [];
+    const shipmentJobs = [];
     try {
         await client.query("BEGIN");
 
@@ -374,6 +388,8 @@ exports.createOrderFromCart = async ({
             // Calculate seller-wise totals
             // --------------------------------------------------------
 
+
+
             let sellerSubtotal = 0;
             let sellerQuantity = 0;
             let sellerTaxAmount = 0;
@@ -431,10 +447,9 @@ exports.createOrderFromCart = async ({
             // Delivery charge per seller order
             // --------------------------------------------------------
 
-            const delivery_charge =
-                sellerSubtotal <= 499 && !isDeliveryChargesAdded
-                    ? 49
-                    : 0;
+            const delivery_charge = !isDeliveryChargesAdded
+                ? data?.delivery_charge
+                : 0;
 
             // --------------------------------------------------------
             // Seller order total
@@ -547,8 +562,18 @@ exports.createOrderFromCart = async ({
                 ]
             );
 
+
             const order = orderRes.rows[0];
-             isDeliveryChargesAdded = true;
+
+
+            shipmentJobs.push({
+                order,
+                seller_id: sellerId,
+                sellerItems
+            });
+
+            // const order = orderRes.rows[0];
+            isDeliveryChargesAdded = true;
 
             // ========================================================
             // 9. INSERT ORDER ITEMS FOR THIS SELLER
@@ -767,26 +792,37 @@ exports.createOrderFromCart = async ({
                 .catch(console.error);
         }
 
-        // ============================================================
-        // 15. RETURN RESPONSE
-        // ============================================================
 
-        return {
-            orders: createdOrders,
 
-            // First order for backward compatibility
-            order: createdOrders[0] || null,
+        const order_ids = createdOrders?.map(order => ({
+            id: order.id
+        })) || [];
 
-            orders_count: createdOrders.length,
 
-            items_count: cartItems.length,
 
-            total_amount: Number(
-                grandTotalAmount.toFixed(2)
-            ),
+        try {
+            const response = await createDelhiveryOrder(data, order_ids);
 
-            payment_method
-        };
+            return {
+                success: response.success,
+                message: response.message,
+                data: response.data || null,
+                error: response.error || null
+            };
+
+        } catch (shipmentError) {
+            console.error(
+                `Delhivery shipment failed :`,
+                shipmentError
+            );
+
+            return {
+                success: false,
+                message: "Shipment creation failed",
+                error: shipmentError.message
+            };
+        }
+
 
     } catch (error) {
         await client.query("ROLLBACK");
@@ -814,7 +850,7 @@ exports.getCustomerOrders = async (user_id) => {
     for (const order of orders) {
         const itemsRes = await pool.query(
             `
-            SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, p.seller_id
+            SELECT oi.*, p.*
             FROM public.order_items oi
             LEFT JOIN public.products p ON p.id = oi.product_id
             WHERE oi.order_id = $1 
@@ -860,7 +896,7 @@ exports.getCustomerOrderById = async (user_id, order_id) => {
 
     const itemsRes = await pool.query(
         `
-        SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, p.seller_id
+        SELECT oi.*, p.is_return, p.is_replace, p.return_replace_duration, oi.waybill, p.seller_id
         FROM public.order_items oi
         LEFT JOIN public.products p ON p.id = oi.product_id
         WHERE oi.order_id = $1
@@ -1196,105 +1232,459 @@ exports.getOrderUserSnapshot = async (order_id) => {
 // =====================================
 // UPDATE ORDER STATUS
 // =====================================
-exports.updateOrderStatus = async (order_id, order_status, modified_by = null) => {
+
+
+exports.updateOrderStatus = async (
+    order_ids,
+    order_status,
+    modified_by = null,
+    user_id,
+    pickup_request_payload = {}
+) => {
     const client = await pool.connect();
+
+    let transactionStarted = false;
+    let updatedOrders = [];
+    let lowStockItems = [];
+    let shipmentWaybillsToCancel = [];
+
     try {
+        // -----------------------------------------------
+        // 1. BASIC VALIDATION
+        // -----------------------------------------------
+        if (!Array.isArray(order_ids) || order_ids.length === 0) {
+            throw new Error("Please select at least one order");
+        }
+
+        const uniqueOrderIds = [...new Set(order_ids)];
+
+        if (uniqueOrderIds.length !== order_ids.length) {
+            throw new Error("Duplicate order IDs are not allowed");
+        }
+
+        if (!user_id) {
+            throw new Error("Seller user ID is required");
+        }
+
+        if (order_status === "processing") {
+            const {
+                pickup_date,
+                pickup_time,
+                expected_package_count
+            } = pickup_request_payload;
+
+            if (!pickup_date || !pickup_time || !expected_package_count) {
+                throw new Error("Pickup date, time and package count are required");
+            }
+
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(pickup_date)) {
+                throw new Error("Invalid pickup date format. Use YYYY-MM-DD");
+            }
+
+            if (!/^\d{2}:\d{2}:\d{2}$/.test(pickup_time)) {
+                throw new Error("Invalid pickup time format. Use HH:mm:ss");
+            }
+
+            if (
+                !Number.isInteger(Number(expected_package_count)) ||
+                Number(expected_package_count) <= 0
+            ) {
+                throw new Error("Expected package count must be a positive integer");
+            }
+        }
+
         await client.query("BEGIN");
+        transactionStarted = true;
 
-        const orderCheck = await client.query("SELECT * FROM public.orders WHERE id = $1", [order_id]);
-        if (orderCheck.rows.length === 0) throw new Error("Order not found");
-        const order = orderCheck.rows[0];
-
-        // If status changing to confirmed and it's COD/Unpaid, deduct stock now
-        if (order_status === "confirmed" && order.order_status !== "confirmed") {
-            const itemsRes = await client.query("SELECT * FROM public.order_items WHERE order_id = $1", [order_id]);
-
-            for (const item of itemsRes.rows) {
-                const quantity = Number(item.quantity || 0);
-                if (item.variant_id) {
-                    const vRes = await client.query(
-                        `UPDATE public.product_variants SET stock = stock - $1, modified_time = NOW() WHERE id = $2 AND stock >= $1 RETURNING id`,
-                        [quantity, item.variant_id]
-                    );
-                    if (vRes.rows.length === 0) throw new Error(`Insufficient stock for variant: ${item.product_title}`);
-                    await client.query(
-                        `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1), modified_time = NOW() WHERE id = $1`,
-                        [item.product_id]
-                    );
-                } else {
-                    const pRes = await client.query(
-                        `UPDATE public.products SET stock = stock - $1, modified_time = NOW() WHERE id = $2 AND stock >= $1 RETURNING id`,
-                        [quantity, item.product_id]
-                    );
-                    if (pRes.rows.length === 0) throw new Error(`Insufficient stock for product: ${item.product_title}`);
-                }
-
-                // Increment sold quantity
-                await client.query(
-                    `UPDATE public.products SET sold = COALESCE(sold, 0) + $1, modified_time = NOW() WHERE id = $2`,
-                    [quantity, item.product_id]
-                );
-            }
-        }
-
-        // If status changing to cancelled and it was previously confirmed/processing/shipped/delivered, restore stock
-        const stockDeductedStatuses = ["confirmed", "processing", "shipped", "delivered"];
-        if (order_status === "cancelled" && stockDeductedStatuses.includes(order.order_status)) {
-            const itemsRes = await client.query("SELECT * FROM public.order_items WHERE order_id = $1", [order_id]);
-
-            for (const item of itemsRes.rows) {
-                const quantity = Number(item.quantity || 0);
-                if (item.variant_id) {
-                    await client.query(
-                        `UPDATE public.product_variants SET stock = stock + $1, modified_time = NOW() WHERE id = $2`,
-                        [quantity, item.variant_id]
-                    );
-                    await client.query(
-                        `UPDATE public.products SET stock = (SELECT COALESCE(SUM(stock), 0) FROM public.product_variants WHERE product_id = $1), modified_time = NOW() WHERE id = $1`,
-                        [item.product_id]
-                    );
-                } else {
-                    await client.query(
-                        `UPDATE public.products SET stock = stock + $1, modified_time = NOW() WHERE id = $2`,
-                        [quantity, item.product_id]
-                    );
-                }
-
-                // Decrement sold quantity
-                await client.query(
-                    `UPDATE public.products SET sold = GREATEST(0, COALESCE(sold, 0) - $1), modified_time = NOW() WHERE id = $2`,
-                    [quantity, item.product_id]
-                );
-            }
-        }
-
-        const res = await client.query(
-            `UPDATE public.orders SET order_status = $1, modified_by = $2, modified_time = NOW() WHERE id = $3 RETURNING *`,
-            [order_status, modified_by, order_id]
+        // -----------------------------------------------
+        // 2. FETCH SELLER AND PICKUP LOCATION
+        // -----------------------------------------------
+        const userResult = await client.query(
+            `SELECT id, delhivery_pickup_address_id
+             FROM public.users
+             WHERE id = $1
+             FOR UPDATE`,
+            [user_id]
         );
 
-        await client.query("COMMIT");
+        if (userResult.rowCount === 0) {
+            throw new Error("Seller user not found");
+        }
 
-        // TRIGGER NOTIFICATION
-        notificationTriggers.onOrderStatusUpdated(order_id, order_status).catch(console.error);
-        sellerPaymentModal.updatePaymentStatusByOrder(order_id, order_status).catch(console.error);
+        const seller = userResult.rows[0];
 
-        // TRIGGER LOW STOCK CHECK IF DEDUCTED
-        if (order_status === "confirmed" && order.order_status !== "confirmed") {
-            const itemsRes = await pool.query("SELECT product_id, variant_id FROM public.order_items WHERE order_id = $1", [order_id]);
-            for (const item of itemsRes.rows) {
-                notificationTriggers.checkLowStock(item.product_id, item.variant_id).catch(console.error);
+        // -----------------------------------------------
+        // 3. LOCK AND FETCH ALL SELECTED ORDERS
+        // -----------------------------------------------
+        const ordersResult = await client.query(
+            `SELECT *
+             FROM public.orders
+             WHERE id = ANY($1::uuid[])
+             ORDER BY id
+             FOR UPDATE`,
+            [uniqueOrderIds]
+        );
+
+        if (ordersResult.rowCount !== uniqueOrderIds.length) {
+            throw new Error("One or more selected orders were not found");
+        }
+
+        const orders = ordersResult.rows;
+
+
+        // -----------------------------------------------
+        // 4. VALIDATE CURRENT ORDER STATUSES
+        // -----------------------------------------------
+        if (order_status === "processing") {
+            const invalidOrders = orders.filter(
+                (order) => order.order_status !== "confirmed"
+            );
+
+            if (invalidOrders.length > 0) {
+                throw new Error(
+                    "Only confirmed orders can be moved to processing"
+                );
+            }
+
+            if (!seller.delhivery_pickup_address_id) {
+                throw new Error("Delhivery pickup warehouse is not registered");
             }
         }
 
-        return res.rows[0];
-    } catch (err) {
-        await client.query("ROLLBACK");
-        throw err;
+        // -----------------------------------------------
+        // 5. FETCH ORDER ITEMS
+        // -----------------------------------------------
+        const itemsResult = await client.query(
+            `SELECT *
+             FROM public.order_items
+             WHERE order_id = ANY($1::uuid[])
+             ORDER BY order_id, id
+             FOR UPDATE`,
+            [uniqueOrderIds]
+        );
+
+        const itemsByOrder = new Map();
+
+        for (const item of itemsResult.rows) {
+            if (!itemsByOrder.has(String(item.order_id))) {
+                itemsByOrder.set(String(item.order_id), []);
+            }
+
+            itemsByOrder.get(String(item.order_id)).push(item);
+        }
+
+        // -----------------------------------------------
+        // 6. UPDATE EACH ORDER
+        // -----------------------------------------------
+        const stockDeductedStatuses = [
+            "confirmed",
+            "processing",
+            "shipped",
+            "delivered"
+        ];
+
+        for (const order of orders) {
+            const previousStatus = order.order_status;
+            const orderItems = itemsByOrder.get(String(order.id)) || [];
+
+            // -------------------------------------------
+            // DEDUCT STOCK ON CONFIRMATION
+            // -------------------------------------------
+            if (
+                order_status === "confirmed" &&
+                previousStatus !== "confirmed"
+            ) {
+                for (const item of orderItems) {
+                    const quantity = Number(item.quantity || 0);
+
+                    if (!Number.isFinite(quantity) || quantity <= 0) {
+                        throw new Error(
+                            `Invalid quantity for ${item.product_title}`
+                        );
+                    }
+
+                    if (item.variant_id) {
+                        const variantResult = await client.query(
+                            `UPDATE public.product_variants
+                             SET stock = stock - $1,
+                                 modified_time = NOW()
+                             WHERE id = $2
+                               AND stock >= $1
+                             RETURNING id`,
+                            [quantity, item.variant_id]
+                        );
+
+                        if (variantResult.rowCount === 0) {
+                            throw new Error(
+                                `Insufficient stock for variant: ${item.product_title}`
+                            );
+                        }
+
+                        await client.query(
+                            `UPDATE public.products
+                             SET stock = (
+                                 SELECT COALESCE(SUM(stock), 0)
+                                 FROM public.product_variants
+                                 WHERE product_id = $1
+                             ),
+                             modified_time = NOW()
+                             WHERE id = $1`,
+                            [item.product_id]
+                        );
+                    } else {
+                        const productResult = await client.query(
+                            `UPDATE public.products
+                             SET stock = stock - $1,
+                                 modified_time = NOW()
+                             WHERE id = $2
+                               AND stock >= $1
+                             RETURNING id`,
+                            [quantity, item.product_id]
+                        );
+
+                        if (productResult.rowCount === 0) {
+                            throw new Error(
+                                `Insufficient stock for product: ${item.product_title}`
+                            );
+                        }
+                    }
+
+                    await client.query(
+                        `UPDATE public.products
+                         SET sold = COALESCE(sold, 0) + $1,
+                             modified_time = NOW()
+                         WHERE id = $2`,
+                        [quantity, item.product_id]
+                    );
+
+                    lowStockItems.push({
+                        product_id: item.product_id,
+                        variant_id: item.variant_id
+                    });
+                }
+            }
+
+            // -------------------------------------------
+            // RESTORE STOCK ON CANCELLATION
+            // -------------------------------------------
+            if (
+                order_status === "cancelled" &&
+                stockDeductedStatuses.includes(previousStatus)
+            ) {
+                for (const item of orderItems) {
+                    const quantity = Number(item.quantity || 0);
+
+                    if (quantity <= 0) continue;
+
+                    if (item.variant_id) {
+                        await client.query(
+                            `UPDATE public.product_variants
+                             SET stock = stock + $1,
+                                 modified_time = NOW()
+                             WHERE id = $2`,
+                            [quantity, item.variant_id]
+                        );
+
+                        await client.query(
+                            `UPDATE public.products
+                             SET stock = (
+                                 SELECT COALESCE(SUM(stock), 0)
+                                 FROM public.product_variants
+                                 WHERE product_id = $1
+                             ),
+                             modified_time = NOW()
+                             WHERE id = $1`,
+                            [item.product_id]
+                        );
+                    } else {
+                        await client.query(
+                            `UPDATE public.products
+                             SET stock = stock + $1,
+                                 modified_time = NOW()
+                             WHERE id = $2`,
+                            [quantity, item.product_id]
+                        );
+                    }
+
+                    await client.query(
+                        `UPDATE public.products
+                         SET sold = GREATEST(0, COALESCE(sold, 0) - $1),
+                             modified_time = NOW()
+                         WHERE id = $2`,
+                        [quantity, item.product_id]
+                    );
+
+                    if (item.waybill) {
+                        shipmentWaybillsToCancel.push(item.waybill);
+                    }
+                }
+            }
+
+            // -------------------------------------------
+            // UPDATE ORDER STATUS
+            // -------------------------------------------
+            const updateResult = await client.query(
+                `UPDATE public.orders
+                 SET order_status = $1,
+                     modified_by = $2,
+                     modified_time = NOW()
+                 WHERE id = $3
+                 RETURNING *`,
+                [order_status, modified_by, order.id]
+            );
+
+            updatedOrders.push(updateResult.rows[0]);
+        }
+
+        // -----------------------------------------------
+        // 7. COMMIT DATABASE
+        // -----------------------------------------------
+        await client.query("COMMIT");
+        transactionStarted = false;
+
+    } catch (error) {
+        if (transactionStarted) {
+            await client.query("ROLLBACK");
+        }
+
+        throw error;
     } finally {
         client.release();
     }
+
+    // -----------------------------------------------
+    // 8. DELHIVERY PICKUP REQUEST
+    // -----------------------------------------------
+
+
+    if (order_status == "processing") {
+
+        const user_res = await client.query(
+            `SELECT delhivery_pickup_address_id
+     FROM public.users
+     WHERE id = $1`,
+            [user_id]
+        );
+
+        if (user_res.rowCount === 0) {
+            throw new Error("User Not Found");
+        }
+
+        const pickupLocation = user_res.rows[0].delhivery_pickup_address_id;
+
+        if (!pickupLocation) {
+            throw new Error("Delhivery pickup location not registered");
+        }
+        const { pickup_date } = pickup_request_payload;
+        const { pickup_time } = pickup_request_payload;
+        const { expected_package_count } = pickup_request_payload;
+
+        const res = await client.query(
+            `SELECT * FROM public.pickup_requests WHERE scheduled_date = $1 AND  seller_id = $2`,
+            [pickup_date, modified_by]
+        );
+
+
+        if (res?.rowCount == 0) {
+            try {
+
+                const res = await axios.post(
+                    `${process.env.TESTING_DELHIVERY_BASE_URL}/fm/request/new/`,
+                    {
+                        ...pickup_request_payload,
+                        pickup_location: pickupLocation
+                    },
+                    {
+                        headers: {
+                            Authorization: `Token ${process.env.TESTING_DELHIVERY_TOKEN}`,
+                            "Content-Type": "application/json",
+                            Accept: "application/json"
+                        },
+                        timeout: 30000
+                    }
+                );
+
+                if (!res.data.pr_exist) {
+                    await client.query(
+                        `INSERT INTO public.pickup_requests(scheduled_date, seller_id, parcel_qty, pickup_time) VALUES($1, $2, $3, $4)`,
+                        [pickup_date, modified_by, expected_package_count, pickup_time]
+                    );
+                }
+
+            } catch (error) {
+                console.error(
+                    "Pickup request creation error:",
+                    error.response?.data || error.message
+                );
+
+                throw new Error(
+                    error.response?.data?.message ||
+                    "Failed to create Delhivery pickup request"
+                );
+            }
+        }
+
+    }
+
+    // -----------------------------------------------
+    // 9. CANCEL SHIPMENTS
+    // -----------------------------------------------
+    // if (order_status === "cancelled" && shipmentWaybillsToCancel.length) {
+    //     const uniqueWaybills = [...new Set(shipmentWaybillsToCancel)];
+
+    //     const cancellationResults = await Promise.allSettled(
+    //         uniqueWaybills.map((waybill) => cancelShipment({ waybill }))
+    //     );
+
+    //     cancellationResults.forEach((result, index) => {
+    //         if (result.status === "rejected") {
+    //             console.error("Shipment Cancellation Error:", {
+    //                 waybill: uniqueWaybills[index],
+    //                 error:
+    //                     result.reason?.response?.data ||
+    //                     result.reason?.message
+    //             });
+    //         }
+    //     });
+    // }
+
+    // -----------------------------------------------
+    // 10. TRIGGER NOTIFICATIONS AND PAYMENT UPDATES
+    // -----------------------------------------------
+    for (const order of updatedOrders) {
+        notificationTriggers
+            .onOrderStatusUpdated(order.id, order_status)
+            .catch(console.error);
+
+        sellerPaymentModal
+            .updatePaymentStatusByOrder(order.id, order_status)
+            .catch(console.error);
+    }
+
+    // -----------------------------------------------
+    // 11. LOW STOCK CHECKS
+    // -----------------------------------------------
+    if (order_status === "confirmed") {
+        const uniqueItems = [
+            ...new Map(
+                lowStockItems.map((item) => [
+                    `${item.product_id}_${item.variant_id || ""}`,
+                    item
+                ])
+            ).values()
+        ];
+
+        for (const item of uniqueItems) {
+            notificationTriggers
+                .checkLowStock(item.product_id, item.variant_id)
+                .catch(console.error);
+        }
+    }
+
+    return updatedOrders;
 };
+
+
 
 // =====================================
 // UPDATE PAYMENT STATUS
@@ -1475,7 +1865,7 @@ exports.verifyOrderPayment = async ({
 // =====================================
 // CANCEL ORDER
 // =====================================
-exports.cancelOrder = async (order_id, modified_by = null) => {
+exports.cancelOrder = async (order_id, modified_by = null, order = {}) => {
     const res = await pool.query(
         `
         UPDATE public.orders
@@ -1491,6 +1881,23 @@ exports.cancelOrder = async (order_id, modified_by = null) => {
     if (res.rows.length === 0) {
         throw new Error("Order not found");
     }
+
+
+    try {
+        await Promise.all(
+            order.items.map(async (item) => {
+                return await cancelShipment({
+                    waybill: item.waybill
+                });
+            })
+        );
+    } catch (error) {
+        console.error(
+            "Shipment Cancellation Error:",
+            error.response?.data || error.message
+        );
+    }
+
 
     // TRIGGER NOTIFICATION
     notificationTriggers.onOrderStatusUpdated(order_id, 'cancelled').catch(console.error);

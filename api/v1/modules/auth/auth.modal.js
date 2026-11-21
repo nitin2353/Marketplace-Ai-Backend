@@ -1,7 +1,8 @@
 const pool = require("../../../../config/database");
-const { addPickupAddress } = require("../shiprocket/shiprocket.controller");
+const { addPickupAddress } = require("../delhivery/delhivery.controller");
 
 // ── CREATE USER (Unified for Customer & Seller) ──────────────────────────
+
 
 const createUser = async (data) => {
     const {
@@ -42,38 +43,40 @@ const createUser = async (data) => {
     const query = `
         INSERT INTO public.users (
             name, email, password, role, first_name, last_name, phone, gender,
-            dob, bio, website, business_name, business_type, gstin, pan, store_description,
-            address_line_1, city, state, pincode, country,
-            bank_name, account_holder, account_number, ifsc, account_type, upi_id,
-            notify, notification_preferences, status, seller_signature, pickup_serviceable
+            dob, bio, website, business_name, business_type, gstin, pan,
+            store_description, address_line_1, city, state, pincode, country,
+            bank_name, account_holder, account_number, ifsc, account_type,
+            upi_id, notify, notification_preferences, status, seller_signature,
+            pickup_serviceable
         )
         VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8,
             $9, $10, $11, $12, $13, $14, $15, $16,
-            $17, $18, $19, $20, $21,
-            $22, $23, $24, $25, $26, $27,
-            $28, $29, $30, $31, $32
+            $17, $18, $19, $20, $21, $22, $23, $24,
+            $25, $26, $27, $28, $29, $30, $31, $32
         )
-        RETURNING id, name, email, role, status, pickup_serviceable;
+        RETURNING *;
     `;
 
     const values = [
-        name, email, password, role, first_name, last_name, phone, gender || null,
-        dob || null, bio || null, website || null, business_name || null,
-        business_type || null, gstin || null, pan || null, store_description || null,
-        address_line_1 || null, city || null, state || null, pincode || null,
-        country || null, bank_name || null, account_holder || null,
-        account_number || null, ifsc || null, account_type || null, upi_id || null,
+        name, email, password, role, first_name, last_name, phone,
+        gender || null, dob || null, bio || null, website || null,
+        business_name || null, business_type || null, gstin || null,
+        pan || null, store_description || null, address_line_1 || null,
+        city || null, state || null, pincode || null, country || null,
+        bank_name || null, account_holder || null, account_number || null,
+        ifsc || null, account_type || null, upi_id || null,
         notify, JSON.stringify(notification_preferences), status,
         seller_signature || null, pickup_serviceable ?? null
     ];
 
-    // 1. First create the user in the database.
+    // 1. Create user
     const result = await pool.query(query, values);
+    let user = result.rows[0];
 
-    const user = result.rows[0];
+    // 2. Register seller pickup address in Shiprocket
 
-    // 2. Register a pickup address only for sellers with a complete address.
+    // Register pickup address only for sellers
     if (
         user.role === "seller" &&
         address_line_1 &&
@@ -86,10 +89,43 @@ const createUser = async (data) => {
         phone
     ) {
         try {
-            await addPickupAddress(data);
+            const delhiveryResponse = await addPickupAddress(data);
+      
+            if (
+                delhiveryResponse?.data?.success &&
+                delhiveryResponse?.data?.data?.active &&
+                delhiveryResponse?.data?.data?.client
+            ) {
+                const pickupId = delhiveryResponse?.data?.data?.client;
+                const pickupCode = delhiveryResponse?.data?.data.pincode;
+           
+                const updateQuery = `
+                UPDATE public.users
+                SET
+                    delhivery_pickup_address_id = $1,
+                    delhivery_pickup_code = $2
+                WHERE id = $3
+                RETURNING *;
+            `;
+
+
+                const updateResult = await pool.query(updateQuery, [
+                    pickupId,
+                    pickupCode,
+                    user.id
+                ]);
+
+                user = updateResult.rows[0];
+
+            } else {
+                throw new Error(
+                    "Invalid Delhivery pickup registration response"
+                );
+            }
+
         } catch (error) {
             console.error(
-                "Shiprocket pickup address registration failed:",
+                "Delhivery pickup registration failed:",
                 error.response?.data || error.message
             );
         }
@@ -97,6 +133,7 @@ const createUser = async (data) => {
 
     return user;
 };
+
 
 
 const findUserByEmail = async (email, activeOnly = false) => {

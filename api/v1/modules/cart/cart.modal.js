@@ -11,18 +11,29 @@ const getAllCart = async (user_id) => {
             c.product_price,
 
             p.id AS product_id,
+            p.seller_id,
+			p.seller_id,
             p.title,
             p.base_price,
             p.image_url,
             p.brand,
             p.stock As product_avl_stock,
             p.tax_percentage,
+            p.length,
+            p.width,
+            p.height,
+            p.weight,
 
             v.id AS variant_id,
             v.color,
             v.size,
             v.final_price,
-            v.stock As available_stock
+            v.stock As available_stock,
+
+			u.pincode,
+            u.id,
+            u.delhivery_pickup_address_id,
+            u.delhivery_pickup_code
 
         FROM public.cart c
 
@@ -31,6 +42,10 @@ const getAllCart = async (user_id) => {
 
         LEFT JOIN public.product_variants v
             ON v.id = c.variant_id
+				
+		INNER JOIN public.users u
+			ON u.id = p.seller_id
+
 
         WHERE c.user_id = $1
 

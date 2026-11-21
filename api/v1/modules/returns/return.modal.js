@@ -77,10 +77,7 @@ exports.createReturnRequest = async ({
             [order_item_id]
         );
 
-        // console.log("exestingRes", existingRes)
-        // if (existingRes.rows.length > 0) {
-        //     throw new Error("A return/replacement request is already active for this item");
-        // }
+
 
         // 2. Insert Request
         const returnRes = await client.query(

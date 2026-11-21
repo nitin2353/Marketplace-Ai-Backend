@@ -20,6 +20,7 @@ exports.createOrder = async (req, res) => {
             cart_items // Added for Buy Now
         } = req.body;
 
+
         const user_id = req.user?.id || null;
 
 
@@ -69,13 +70,20 @@ exports.createOrder = async (req, res) => {
             created_by,
             modified_by,
             items: cart_items // Pass items if provided (for Buy Now)
-        });
+        }, req.body);
 
-        return res.status(201).json({
-            success: true,
-            message: "Order created successfully",
-            data
-        });
+   
+        if (data.success)
+            return res.status(201).json({
+                success: true,
+                message: "Order created successfully",
+                data
+            });
+        else
+            return res.status(500).json({
+                success: false,
+                message: "Delhivery Order Not Created"
+            });
     } catch (err) {
         console.error("CREATE ORDER ERROR:", err);
         return res.status(500).json({
@@ -145,7 +153,7 @@ exports.getSellerOrders = async (req, res) => {
         const { seller_id } = req.params;
 
         const data = await orderService.getSellerOrders(seller_id);
-        return ResponseManager.success(res ,"Record Successfully Fetched", data);
+        return ResponseManager.success(res, "Record Successfully Fetched", data);
     } catch (err) {
         console.error("GET SELLER ORDERS ERROR:", err);
         return res.status(500).json({
@@ -189,7 +197,7 @@ exports.getSellerOrderById = async (req, res) => {
 exports.getOrderById = async (req, res) => {
     try {
         const { order_id } = req.params;
-        
+
         // For security, customers can only see their own orders
         const data = await orderService.getOrderById(order_id);
         if (!data) {
@@ -198,7 +206,7 @@ exports.getOrderById = async (req, res) => {
                 message: "Order not found or unauthorized"
             });
         }
-        
+
         return res.status(200).json({
             success: true,
             message: "Order fetched successfully",
@@ -322,19 +330,17 @@ exports.getOrderUserSnapshot = async (req, res) => {
 // =====================================
 exports.updateOrderStatus = async (req, res) => {
     try {
-        const { order_id } = req.params;
-        const { status } = req.body;
 
-        const modified_by = req.user?.id || req.body.modified_by || null;
-
+        const modified_by = req.user?.id || null;
+        const pickup_request_payload = req.body;
+        const { order_ids } =  pickup_request_payload;
+        const { status } =  pickup_request_payload;
         const allowedStatuses = [
             "placed",
             "confirmed",
             "processing",
-            "shipped",
             "delivered",
-            "cancelled",
-            "payment_failed"
+            "cancelled"
         ];
 
         if (!status) {
@@ -351,7 +357,7 @@ exports.updateOrderStatus = async (req, res) => {
             });
         }
 
-        const data = await orderService.updateOrderStatus(order_id, status, modified_by);
+        const data = await orderService.updateOrderStatus(order_ids, status, modified_by, req.user.id, pickup_request_payload);
 
         return Response.success(res, "Order status updated successfully", data);
     } catch (err) {
@@ -370,7 +376,7 @@ exports.updatePaymentStatus = async (req, res) => {
     try {
         const { order_id } = req.params;
         const { paymentStatus } = req.body;
-        
+
         const modified_by = req.user?.id || req.body.modified_by || null;
 
         const allowedPaymentStatuses = ["pending", "paid", "failed", "refunded", "cancelled"];
@@ -464,10 +470,10 @@ exports.cancelOrder = async (req, res) => {
         }
 
         if (order.order_status === 'delivered' || order.order_status === 'cancelled') {
-             return res.status(400).json({ success: false, message: `Cannot cancel order in ${order.order_status} state` });
+            return res.status(400).json({ success: false, message: `Cannot cancel order in ${order.order_status} state` });
         }
-
-        const data = await orderService.cancelOrder(order_id, user_id);
+      
+        const data = await orderService.cancelOrder(order_id, user_id, order);
 
         return res.status(200).json({
             success: true,
@@ -500,7 +506,7 @@ exports.buyNow = async (req, res) => {
             product_id,
             variant_id,
             quantity: quantity || 1
-        });
+        }, req.body);
 
         return res.status(200).json({
             success: true,
