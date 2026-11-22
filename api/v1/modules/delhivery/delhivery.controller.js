@@ -329,9 +329,7 @@ exports.createDelhiveryOrder = async (data, order_ids = []) => {
                             Boolean(element?.waybill?.trim())
                         )
                     );
-                    // console.log('packages', packages)
-                    // console.log('successfulPackages', successfulPackages)
-                    // console.log('failedPackages', failedPackages)
+        
 
                     const shipmentSuccess =
                         packages.length > 0 &&
@@ -448,21 +446,20 @@ exports.createDelhiveryOrder = async (data, order_ids = []) => {
 
 exports.trackDelivery = async (req, res) => {
     try {
-        const { waybill, ref_ids } = req.params;
-        const response = await axios.patch(
-            `${process.env.SHIPROCKET_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
+        const { waybill, ref_ids } = req.query;
+        const response = await axios.get(
+            `${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
             {
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Token ${process.env.TESTING_DELHIVERY_TOKEN}`,
                     "Content-Type": "application/json",
                 },
                 timeout: 15000,
             }
         );
 
-        console.log('response', response)
 
-        ResponseManager.success(res, "Delivery Status fetched Successfully", response?.ShipmentData);
+        ResponseManager.success(res, "Delivery Status fetched Successfully", response?.data);
     } catch (error) {
         ResponseManager?.serverError(res, error.message);
     }

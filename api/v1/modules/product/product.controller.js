@@ -137,7 +137,6 @@ const createProduct = async (req, res) => {
 //             modified_by: userId,
 //             id: productId
 //         };
-//         console.log("newPayload",newPayload)
 //         const result = await productModel.modelHandleUpdateProduct(newPayload, userId, productId);
 //         if (!result) {
 //             return Response.badRequest(res, "Record not found");
