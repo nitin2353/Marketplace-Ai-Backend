@@ -446,6 +446,7 @@ exports.createDelhiveryOrder = async (data, order_ids = []) => {
 
 exports.trackDelivery = async (req, res) => {
     try {
+        console.log(`${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`)
         const { waybill, ref_ids } = req.query;
         const response = await axios.get(
             `${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
@@ -457,6 +458,7 @@ exports.trackDelivery = async (req, res) => {
                 timeout: 15000,
             }
         );
+
 
 
         ResponseManager.success(res, "Delivery Status fetched Successfully", response?.data);
