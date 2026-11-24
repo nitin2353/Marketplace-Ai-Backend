@@ -30,4 +30,44 @@ const pickupScheduledDate = async (seller_id) => {
         throw error;
     }
 };
-module.exports = { getCategories, pickupScheduledDate };
+
+
+const createUserFeedbackModal = async (role, feedback) => {
+    try {
+        const result = await pool.query(
+            `
+            INSERT INTO public.user_feedback
+                (role, feedback, created_at)
+            VALUES
+                ($1, $2, NOW())
+            RETURNING *;
+            `,
+            [role, feedback]
+        );
+
+        return result;
+
+    } catch (error) {
+        throw error;
+    }
+};
+
+const getUserFeedbackModal = async (role) => {
+    try {
+        const result = await pool.query(
+            `
+            SELECT *
+            FROM public.user_feedback
+            ORDER BY created_at DESC;
+            `
+        );
+
+        return result;
+
+    } catch (error) {
+        throw error;
+    }
+};
+
+
+module.exports = { getCategories, pickupScheduledDate, createUserFeedbackModal, getUserFeedbackModal };

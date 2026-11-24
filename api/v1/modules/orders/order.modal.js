@@ -1248,6 +1248,11 @@ exports.updateOrderStatus = async (
     let lowStockItems = [];
     let shipmentWaybillsToCancel = [];
 
+
+    console.log('order_status', order_status)
+
+
+
     try {
         // -----------------------------------------------
         // 1. BASIC VALIDATION
@@ -1339,6 +1344,7 @@ exports.updateOrderStatus = async (
             const invalidOrders = orders.filter(
                 (order) => order.order_status !== "confirmed"
             );
+
 
             if (invalidOrders.length > 0) {
                 throw new Error(
@@ -1523,6 +1529,15 @@ exports.updateOrderStatus = async (
             // -------------------------------------------
             // UPDATE ORDER STATUS
             // -------------------------------------------
+            console.log('order.order_status', order)
+            console.log('order.order_status', order.order_status)
+            if (order.order_status === "processing" && order_status === "confirmed") {
+                throw new Error(
+                    "You can't change the status of a processing order."
+                );
+            }
+
+
             const updateResult = await client.query(
                 `UPDATE public.orders
                  SET order_status = $1,
@@ -1551,18 +1566,15 @@ exports.updateOrderStatus = async (
     } finally {
         client.release();
     }
-
     // -----------------------------------------------
     // 8. DELHIVERY PICKUP REQUEST
     // -----------------------------------------------
-
-
     if (order_status == "processing") {
 
         const user_res = await client.query(
             `SELECT delhivery_pickup_address_id
-     FROM public.users
-     WHERE id = $1`,
+            FROM public.users
+            WHERE id = $1`,
             [user_id]
         );
 
@@ -1603,7 +1615,7 @@ exports.updateOrderStatus = async (
                         timeout: 30000
                     }
                 );
-
+                console.log('res', res)
                 if (!res.data.pr_exist) {
                     await client.query(
                         `INSERT INTO public.pickup_requests(scheduled_date, seller_id, parcel_qty, pickup_time) VALUES($1, $2, $3, $4)`,
@@ -1625,28 +1637,6 @@ exports.updateOrderStatus = async (
         }
 
     }
-
-    // -----------------------------------------------
-    // 9. CANCEL SHIPMENTS
-    // -----------------------------------------------
-    // if (order_status === "cancelled" && shipmentWaybillsToCancel.length) {
-    //     const uniqueWaybills = [...new Set(shipmentWaybillsToCancel)];
-
-    //     const cancellationResults = await Promise.allSettled(
-    //         uniqueWaybills.map((waybill) => cancelShipment({ waybill }))
-    //     );
-
-    //     cancellationResults.forEach((result, index) => {
-    //         if (result.status === "rejected") {
-    //             console.error("Shipment Cancellation Error:", {
-    //                 waybill: uniqueWaybills[index],
-    //                 error:
-    //                     result.reason?.response?.data ||
-    //                     result.reason?.message
-    //             });
-    //         }
-    //     });
-    // }
 
     // -----------------------------------------------
     // 10. TRIGGER NOTIFICATIONS AND PAYMENT UPDATES

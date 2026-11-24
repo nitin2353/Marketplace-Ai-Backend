@@ -601,70 +601,334 @@ const deleteById = async (id) => {
 // models/productModel.js
 
 const handleFindByQueryModel = async ({ q, limit, offset }) => {
+
     const query = `
+    WITH
+
+    -- Normalize user search input only once
+    search_input AS MATERIALIZED (
+        SELECT LOWER(BTRIM(COALESCE($1::TEXT, ''))) AS q
+    ),
+
+    -- Split input into unique individual words
+    search_tokens AS MATERIALIZED (
+        SELECT DISTINCT cleaned.word
+        FROM search_input si
+
+        CROSS JOIN LATERAL
+            REGEXP_SPLIT_TO_TABLE(
+                si.q,
+                '[[:space:]]+'
+            ) AS parts(raw_word)
+
+        CROSS JOIN LATERAL (
+            SELECT REGEXP_REPLACE(
+                parts.raw_word,
+                '^[^[:alnum:]]+|[^[:alnum:]]+$',
+                '',
+                'g'
+            ) AS word
+        ) cleaned
+
+        WHERE cleaned.word <> ''
+    ),
+
+    -- Stage 1: Find complete phrase matches
+    phrase_matches AS MATERIALIZED (
+        SELECT
+            p.id,
+
+            CASE
+                WHEN si.q = '' THEN 0::REAL
+
+                ELSE GREATEST(
+                    SIMILARITY(
+                        LOWER(COALESCE(p.title, '')),
+                        si.q
+                    ),
+
+                    WORD_SIMILARITY(
+                        si.q,
+                        LOWER(COALESCE(p.title, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.description, '')),
+                        si.q
+                    ),
+
+                    WORD_SIMILARITY(
+                        si.q,
+                        LOWER(COALESCE(p.description, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.category, '')),
+                        si.q
+                    ),
+
+                    WORD_SIMILARITY(
+                        si.q,
+                        LOWER(COALESCE(p.category, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.brand, '')),
+                        si.q
+                    ),
+
+                    WORD_SIMILARITY(
+                        si.q,
+                        LOWER(COALESCE(p.brand, ''))
+                    ),
+
+                    CASE
+                        WHEN p.base_price = CASE
+                            WHEN si.q ~ '^[0-9]+([.][0-9]+)?$'
+                            THEN si.q::NUMERIC
+                            ELSE NULL
+                        END
+                        THEN 1.0::REAL
+                        ELSE 0.0::REAL
+                    END
+                )
+            END AS search_score,
+
+            1 AS match_priority,
+            0 AS matched_words
+
+        FROM public.products p
+
+        INNER JOIN public.users u
+            ON u.id = p.seller_id
+            AND p.status = 'true'
+            AND u.pickup_serviceable = TRUE
+
+        CROSS JOIN search_input si
+
+        WHERE
+            LOWER(u.status::TEXT) IN ('active', 'true')
+
+            AND (
+                -- Empty search: normal product listing
+                si.q = ''
+
+                OR (
+
+                    -- Full phrase search: indexed substring matching
+                    (
+                        CHAR_LENGTH(si.q) >= 3
+                        AND (
+                            LOWER(COALESCE(p.title, ''))
+                                LIKE '%' || si.q || '%'
+
+                            OR LOWER(COALESCE(p.description, ''))
+                                LIKE '%' || si.q || '%'
+
+                            OR LOWER(COALESCE(p.category, ''))
+                                LIKE '%' || si.q || '%'
+
+                            OR LOWER(COALESCE(p.brand, ''))
+                                LIKE '%' || si.q || '%'
+                        )
+                    )
+
+                    -- Exact matching, including short queries
+                    OR LOWER(COALESCE(p.title, '')) = si.q
+                    OR LOWER(COALESCE(p.description, '')) = si.q
+                    OR LOWER(COALESCE(p.category, '')) = si.q
+                    OR LOWER(COALESCE(p.brand, '')) = si.q
+
+                    -- Exact numeric price matching
+                    OR p.base_price = CASE
+                        WHEN si.q ~ '^[0-9]+([.][0-9]+)?$'
+                        THEN si.q::NUMERIC
+                        ELSE NULL
+                    END
+                )
+            )
+    ),
+
+    -- Stage 2: Individual word fallback
+    -- Runs only when Stage 1 returns zero products
+    word_matches AS MATERIALIZED (
+        SELECT
+            p.id,
+
+            COUNT(DISTINCT t.word)::INTEGER AS matched_words,
+
+            MAX(
+                GREATEST(
+                    SIMILARITY(
+                        LOWER(COALESCE(p.title, '')),
+                        t.word
+                    ),
+
+                    WORD_SIMILARITY(
+                        t.word,
+                        LOWER(COALESCE(p.title, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.description, '')),
+                        t.word
+                    ),
+
+                    WORD_SIMILARITY(
+                        t.word,
+                        LOWER(COALESCE(p.description, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.category, '')),
+                        t.word
+                    ),
+
+                    WORD_SIMILARITY(
+                        t.word,
+                        LOWER(COALESCE(p.category, ''))
+                    ),
+
+                    SIMILARITY(
+                        LOWER(COALESCE(p.brand, '')),
+                        t.word
+                    ),
+
+                    WORD_SIMILARITY(
+                        t.word,
+                        LOWER(COALESCE(p.brand, ''))
+                    ),
+
+                    CASE
+                        WHEN p.base_price = CASE
+                            WHEN t.word ~ '^[0-9]+([.][0-9]+)?$'
+                            THEN t.word::NUMERIC
+                            ELSE NULL
+                        END
+                        THEN 1.0::REAL
+                        ELSE 0.0::REAL
+                    END
+                )
+            )::REAL AS search_score,
+
+            2 AS match_priority
+
+        FROM public.products p
+
+        INNER JOIN public.users u
+            ON u.id = p.seller_id
+            AND p.status = 'true'
+            AND u.pickup_serviceable = TRUE
+
+        CROSS JOIN search_input si
+        CROSS JOIN search_tokens t
+
+        WHERE
+            si.q <> ''
+
+            AND LOWER(u.status::TEXT) IN ('active', 'true')
+
+            -- Don't run fallback when full phrase matches exist
+            AND NOT EXISTS (
+                SELECT 1
+                FROM phrase_matches
+            )
+
+            AND (
+
+                -- Words with 3 or more characters:
+                -- substring + indexed fuzzy matching
+                (
+                    CHAR_LENGTH(t.word) >= 3
+
+                    AND (
+                        LOWER(COALESCE(p.title, ''))
+                            LIKE '%' || t.word || '%'
+
+                        OR LOWER(COALESCE(p.description, ''))
+                            LIKE '%' || t.word || '%'
+
+                        OR LOWER(COALESCE(p.category, ''))
+                            LIKE '%' || t.word || '%'
+
+                        OR LOWER(COALESCE(p.brand, ''))
+                            LIKE '%' || t.word || '%'
+
+                        -- Fuzzy matching
+                        OR LOWER(COALESCE(p.title, '')) %> t.word
+
+                        OR LOWER(COALESCE(p.description, '')) %> t.word
+
+                        OR LOWER(COALESCE(p.category, '')) %> t.word
+
+                        OR LOWER(COALESCE(p.brand, '')) %> t.word
+                    )
+                )
+
+                -- Short words: exact matching only.
+                -- Avoid expensive full-table substring scans.
+                OR (
+                    CHAR_LENGTH(t.word) < 3
+
+                    AND (
+                        LOWER(COALESCE(p.title, '')) = t.word
+
+                        OR LOWER(COALESCE(p.category, '')) = t.word
+
+                        OR LOWER(COALESCE(p.brand, '')) = t.word
+                    )
+                )
+
+                -- Numeric words: exact price matching
+                OR p.base_price = CASE
+                    WHEN t.word ~ '^[0-9]+([.][0-9]+)?$'
+                    THEN t.word::NUMERIC
+                    ELSE NULL
+                END
+            )
+
+        GROUP BY p.id
+    ),
+
+    -- Combine both stages
+    matched_products AS (
+
+        SELECT
+            id,
+            search_score,
+            match_priority,
+            matched_words
+        FROM phrase_matches
+
+        UNION ALL
+
+        SELECT
+            id,
+            search_score,
+            match_priority,
+            matched_words
+        FROM word_matches
+    )
+
+    -- Return complete product records
     SELECT
         p.*,
-        GREATEST(
-            similarity(LOWER(COALESCE(p.title, '')), LOWER(TRIM($1))),
-            word_similarity(LOWER(TRIM($1)), LOWER(COALESCE(p.title, '')))
-        ) AS search_score
-    FROM public.products p
-    INNER JOIN public.users u
-        ON u.id = p.seller_id AND u.pickup_serviceable = true
-    WHERE
-        LOWER(u.status::TEXT) IN ('active', 'true')
-        AND (
-            COALESCE(TRIM($1), '') = ''
+        mp.search_score,
+        mp.matched_words
 
-            OR
-            -- Normal phrase match
-            COALESCE(p.title, '') ILIKE '%' || TRIM($1) || '%'
-            OR COALESCE(p.description, '') ILIKE '%' || TRIM($1) || '%'
-            OR COALESCE(p.category, '') ILIKE '%' || TRIM($1) || '%'
+    FROM matched_products mp
 
-            OR
-            -- All words must match normally or fuzzily
-            NOT EXISTS (
-                SELECT 1
-                FROM regexp_split_to_table(
-                    LOWER(TRIM($1)),
-                    '\\s+'
-                ) AS search_word
-                WHERE
-                    search_word <> ''
-                    AND NOT (
-                        COALESCE(p.title, '') ILIKE '%' || search_word || '%'
-                        OR COALESCE(p.description, '') ILIKE '%' || search_word || '%'
-                        OR COALESCE(p.category, '') ILIKE '%' || search_word || '%'
-                        OR COALESCE(p.base_price::TEXT, '') ILIKE '%' || search_word || '%'
+    INNER JOIN public.products p
+        ON p.id = mp.id
 
-                        OR word_similarity(
-                            search_word,
-                            LOWER(COALESCE(p.title, ''))
-                        ) >= 0.30
-
-                        OR word_similarity(
-                            search_word,
-                            LOWER(COALESCE(p.description, ''))
-                        ) >= 0.30
-
-                        OR word_similarity(
-                            search_word,
-                            LOWER(COALESCE(p.category, ''))
-                        ) >= 0.30
-                    )
-            )
-        )
     ORDER BY
-        CASE
-            WHEN LOWER(COALESCE(p.title, '')) = LOWER(TRIM($1)) THEN 1
-            WHEN LOWER(COALESCE(p.title, '')) LIKE LOWER(TRIM($1)) || '%' THEN 2
-            WHEN LOWER(COALESCE(p.title, '')) LIKE '%' || LOWER(TRIM($1)) || '%' THEN 3
-            ELSE 4
-        END,
-        search_score DESC,
-        p.created_at DESC;
-`;
+        mp.match_priority ASC,
+        mp.matched_words DESC,
+        mp.search_score DESC,
+        p.created_at DESC,
+        p.id DESC;
+    `;
+
     const values = [q];
 
     const result = await pool.query(query, values);
@@ -676,7 +940,7 @@ const handleFindByQueryModel = async ({ q, limit, offset }) => {
 const handleFindListByQueryModel = async ({ q, limit, offset }) => {
     const query = `
         SELECT DISTINCT keyword FROM (
-        SELECT title AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true WHERE u.status = 'active' AND title ILIKE '%' || $1 || '%'
+        SELECT title AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true WHERE u.status = 'active' AND p.status = 'true' AND title ILIKE '%' || $1 || '%'
         UNION
         SELECT category AS keyword FROM products p INNER JOIN users u ON u.id = p.seller_id AND u.pickup_serviceable = true WHERE u.status = 'active' AND category ILIKE '%' || $1 || '%'
         ) AS suggestions

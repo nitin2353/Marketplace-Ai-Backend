@@ -79,7 +79,9 @@ exports.getAllSellers = async () => {
 
             COALESCE(SUM(seller_amount), 0) AS total_seller_amount,
             COALESCE(SUM(platform_fee), 0) AS total_platform_fee,
-            COALESCE(SUM(seller_delivery_charges), 0) AS seller_delivery_charges,
+            COALESCE(SUM(seller_delivery_charges) FILTER (
+                WHERE order_status <> 'cancelled'
+            ), 0) AS seller_delivery_charges,
 
             COUNT(*) AS total_payment_records,
 
@@ -350,6 +352,7 @@ exports.updatePaymentStatus = async (paymentId, status) => {
             `UPDATE public.payments
      SET
          seller_amount = seller_earning,
+         settlement_status = 'success',
          settlement_date = NOW()
      WHERE id::text = $1
      RETURNING

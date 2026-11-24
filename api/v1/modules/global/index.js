@@ -13,5 +13,8 @@ router.get("/order/invoice-generate/:order_id/:id", OrderController.getOrderById
 
 router.get("/pickup-scheduled/date/", authMiddleware, globalController.getPickupScheduledDate);
 
+router.post("/user-feedback", authMiddleware, globalController.createUserFeedback);
+
+router.get("/user-feedback", authMiddleware, globalController.getUserFeedback);
 
 module.exports = router;

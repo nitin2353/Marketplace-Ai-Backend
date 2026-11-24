@@ -447,7 +447,6 @@ exports.createDelhiveryOrder = async (data, order_ids = []) => {
 exports.trackDelivery = async (req, res) => {
     try {
         const { waybill, ref_ids } = req.query;
-        console.log(`${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`)
         const response = await axios.get(
             `${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
             {
