@@ -3,7 +3,7 @@ const Response = require("../response");
 const UTILS = require('../../../../utils/global');
 const pool = require('../../../../config/database');
 const { parseBoolean } = require("../../../../utils/global");
-const { status } = require("init");
+const { generateProductSuggestions } = require("./suggestion.service");
 
 
 
@@ -42,26 +42,89 @@ const handleFindByQuery = async (req, res) => {
 };
 
 
+
 const handleFindListByQuery = async (req, res) => {
     try {
-        const { q = "", page = 1, limit = 10 } = req.query;
+        const q = String(req.query.q || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 120);
 
-        const offset = (page - 1) * limit;
+        const limit = Math.min(
+            Math.max(Number(req.query.limit) || 8, 1),
+            12
+        );
 
-        const records = await productModel.handleFindListByQueryModel({
-            q,
-            limit,
-            offset,
-        });
+        if (!q) {
+            return res.status(200).json({
+                success: true,
+                message: "Records fetched successfully",
+                timestamp: new Date().toISOString(),
+                data: [],
+            });
+        }
 
-        return Response.success(res, "Records fetched successfully", records);
+        try {
+            const suggestions = await generateProductSuggestions(
+                q,
+                limit
+            );
+
+            return res.status(200).json({
+                success: true,
+                message: "Records fetched successfully",
+                timestamp: new Date().toISOString(),
+                data: suggestions,
+            });
+
+        } catch (aiError) {
+
+            // Fallback to existing PostgreSQL suggestion method
+            console.error(
+                "AI Suggestion Error:",
+                aiError.message
+            );
+
+            const fallbackRecords =
+                await productModel.handleFindListByQueryModel({
+                    q,
+                    limit,
+                    offset: 0,
+                });
+
+            const fallbackSuggestions = [
+                ...new Map(
+                    fallbackRecords
+                        .map(item => ({
+                            keyword: String(item.keyword || "").trim(),
+                        }))
+                        .filter(item => item.keyword)
+                        .map(item => [
+                            item.keyword.toLowerCase(),
+                            item,
+                        ])
+                ).values()
+            ];
+
+            return res.status(200).json({
+                success: true,
+                message: "Records fetched successfully",
+                timestamp: new Date().toISOString(),
+                data: fallbackSuggestions,
+            });
+        }
 
     } catch (error) {
-        console.error("SEARCH ERROR:", error);
+        console.error("PRODUCT SUGGESTION ERROR:", error);
 
-        return Response.serverError(res, error.message || "Internal Server Error");
+        return res.status(500).json({
+            success: false,
+            message: "Unable to generate product suggestions",
+            data: [],
+        });
     }
 };
+
 
 
 
