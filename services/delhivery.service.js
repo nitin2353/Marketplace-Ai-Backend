@@ -46,7 +46,7 @@ const checkPincode = async (pincode) => {
 
 
 const createShipment = async (input, order_id) => {
-    const url = `${process.env.TESTING_DELHIVERY_BASE_URL}/api/cmu/create.json`;
+    const url = `${process.env.DELHIVERY_BASE_URL}/api/cmu/create.json`;
 
     try {
         // 1. Validate configuration
@@ -238,7 +238,7 @@ const createShipment = async (input, order_id) => {
                     formData.toString(),
                     {
                         headers: {
-                            Authorization: `Token ${process.env.TESTING_DELHIVERY_TOKEN}`,
+                            Authorization: `Token ${process.env.DELHIVERY_TOKEN}`,
                             "Content-Type":
                                 "application/x-www-form-urlencoded"
                         },
@@ -340,7 +340,7 @@ const cancelShipment = async ({
 } = {}) => {
     try {
         // STEP 1: Validate configuration
-        if (!process.env.TESTING_DELHIVERY_TOKEN) {
+        if (!process.env.DELHIVERY_TOKEN) {
             throw new Error("DELHIVERY_TOKEN is missing");
         }
 
@@ -377,7 +377,7 @@ const cancelShipment = async ({
 
         // STEP 4: Call Delhivery cancellation API
         const response = await axios.post(
-            process.env.TESTING_DELHIVERY_BASE_URL,
+            process.env.DELHIVERY_BASE_URL,
             payload,
             {
                 headers: {

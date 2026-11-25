@@ -1529,8 +1529,7 @@ exports.updateOrderStatus = async (
             // -------------------------------------------
             // UPDATE ORDER STATUS
             // -------------------------------------------
-            console.log('order.order_status', order)
-            console.log('order.order_status', order.order_status)
+       
             if (order.order_status === "processing" && order_status === "confirmed") {
                 throw new Error(
                     "You can't change the status of a processing order."
@@ -1601,14 +1600,14 @@ exports.updateOrderStatus = async (
             try {
 
                 const res = await axios.post(
-                    `${process.env.TESTING_DELHIVERY_BASE_URL}/fm/request/new/`,
+                    `${process.env.DELHIVERY_BASE_URL}/fm/request/new/`,
                     {
                         ...pickup_request_payload,
                         pickup_location: pickupLocation
                     },
                     {
                         headers: {
-                            Authorization: `Token ${process.env.TESTING_DELHIVERY_TOKEN}`,
+                            Authorization: `Token ${process.env.DELHIVERY_TOKEN}`,
                             "Content-Type": "application/json",
                             Accept: "application/json"
                         },

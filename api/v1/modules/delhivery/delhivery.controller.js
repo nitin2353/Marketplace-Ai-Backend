@@ -448,10 +448,10 @@ exports.trackDelivery = async (req, res) => {
     try {
         const { waybill, ref_ids } = req.query;
         const response = await axios.get(
-            `${process.env.TESTING_DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
+            `${process.env.DELHIVERY_BASE_URL}/api/v1/packages/json/?waybill=${waybill}&ref_ids=${ref_ids}`,
             {
                 headers: {
-                    Authorization: `Token ${process.env.TESTING_DELHIVERY_TOKEN}`,
+                    Authorization: `Token ${process.env.DELHIVERY_TOKEN}`,
                     "Content-Type": "application/json",
                 },
                 timeout: 15000,
