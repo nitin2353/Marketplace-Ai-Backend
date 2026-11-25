@@ -1249,10 +1249,6 @@ exports.updateOrderStatus = async (
     let shipmentWaybillsToCancel = [];
 
 
-    console.log('order_status', order_status)
-
-
-
     try {
         // -----------------------------------------------
         // 1. BASIC VALIDATION

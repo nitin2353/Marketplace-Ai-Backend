@@ -94,11 +94,11 @@ const createUser = async (data) => {
             if (
                 delhiveryResponse?.data?.success &&
                 delhiveryResponse?.data?.data?.active &&
-                delhiveryResponse?.data?.data?.client
+                delhiveryResponse?.data?.data?.name
             ) {
-                const pickupId = delhiveryResponse?.data?.data?.client;
+                const pickupId = delhiveryResponse?.data?.data?.name;
                 const pickupCode = delhiveryResponse?.data?.data.pincode;
-           
+                
                 const updateQuery = `
                 UPDATE public.users
                 SET

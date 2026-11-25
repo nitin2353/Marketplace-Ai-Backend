@@ -126,7 +126,7 @@ exports.addPickupAddress = async (payload) => {
 
         // 6. Create warehouse in Delhivery
         const response = await axios.post(
-            "https://track.delhivery.com/api/backend/clientwarehouse/create/",
+            `${process.env.DELHIVERY_BASE_URL}/api/backend/clientwarehouse/create/`,
             pickupPayload,
             {
                 headers: {
