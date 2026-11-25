@@ -1614,7 +1614,7 @@ exports.updateOrderStatus = async (
                         timeout: 30000
                     }
                 );
-                console.log('res', res)
+                
                 if (!res.data.pr_exist) {
                     await client.query(
                         `INSERT INTO public.pickup_requests(scheduled_date, seller_id, parcel_qty, pickup_time) VALUES($1, $2, $3, $4)`,
