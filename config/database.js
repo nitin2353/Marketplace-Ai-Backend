@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 const { Pool } = require('pg');
 const { dbConfig } = require('./db.config');
 
@@ -15,3 +16,25 @@ pool.query('SELECT NOW()')
   .catch((err) => console.error('❌ DB Connection Error:', err));
 
 module.exports = pool;
+=======
+    const { Pool } = require('pg');
+    const { dbConfig } = require('./db.config');
+
+    const pool = new Pool({
+      host: dbConfig.host,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      database: dbConfig.database,
+      port: dbConfig.port,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    });
+
+
+    pool.query('SELECT NOW()')
+      .then(() => console.log('✅ Database connected successfully'))
+      .catch((err) => console.error('❌ DB Connection Error:', err));
+
+    module.exports = pool;
+>>>>>>> dev_nitin
