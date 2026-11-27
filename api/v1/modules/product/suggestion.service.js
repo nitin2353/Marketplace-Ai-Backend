@@ -64,7 +64,7 @@ const generateProductSuggestions = async (query, limit = 8) => {
 
     const systemPrompt = `
 You are an intelligent e-commerce product search autocomplete engine
-for an online marketplace named FlashiBuy.
+for an online marketplace named AshoNex.
 
 Generate up to ${limit} relevant product search suggestions.
 
@@ -80,7 +80,7 @@ Requirements:
    - Occasions and use cases
 
 4. CUSTOMIZABLE PRODUCTS:
-FlashiBuy supports:
+AshoNex supports:
 - Customized T-shirts
 - Personalized mugs
 - Custom photo frames
