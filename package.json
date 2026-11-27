@@ -1,7 +1,7 @@
 {
-  "name": "ibs-ratantextile-backend",
+  "name": "ashonex",
   "version": "1.0.0",
-  "description": "HMVC backend designed for Ratan Textile innovation",
+  "description": "Ai Powered Marketplace AshoNex",
   "main": "start.js",
   "type": "commonjs",
   "scripts": {
@@ -11,19 +11,19 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anirudh-ibirds/ibs-ratantextile-backend.git"
+    "url": "git+https://github.com/nitin2353/Marketplace-Ai-Backend.git"
   },
   "keywords": [
-    "iBirds",
-    "Ratan",
-    "Textile"
+    "Nitin",
+    "shopping",
+    "buy"
   ],
-  "author": "iBirds",
+  "author": "Nitin",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/anirudh-ibirds/ibs-ratantextile-backend/issues"
+    "url": "https://github.com/nitin2353/Marketplace-Ai-Backend/issues"
   },
-  "homepage": "https://github.com/anirudh-ibirds/ibs-ratantextile-backend#readme",
+  "homepage": "https://github.com/nitin2353/Marketplace-Ai-Backend#readme",
   "dependencies": {
     "@google/genai": "^2.0.0",
     "@google/generative-ai": "^0.24.1",

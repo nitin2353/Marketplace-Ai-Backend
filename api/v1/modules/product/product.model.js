@@ -368,7 +368,7 @@ const createProduct = async (data) => {
             parseNumber(data.wishlist_count, 0),
             parseNumber(data.cart_count, 0),
 
-            parseBoolean(data.status === "active" || data.status === "true" || data.status === true, true),
+            parseBoolean(true),
             data.userId || null,
             data.userId || null
         ];

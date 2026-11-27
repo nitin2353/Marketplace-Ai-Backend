@@ -425,7 +425,7 @@ exports.sendResetOtp = async (req, res) => {
             to: existingUser.email,
             subject: "Password Reset OTP",
             html: `<div style="font-family: Arial, sans-serif; max-width: 520px; margin: auto; padding: 20px; border: 1px solid #eeeeee; border-radius: 10px;">
-                        <h2 style="color: #355aff;">ShopEase Password Reset</h2>
+                        <h2 style="color: #355aff;">AshoNex Password Reset</h2>
                         <p>Hello,</p>
                         <p>Your password reset OTP is:</p>
                         <h1 style="letter-spacing: 6px; background:#f8fafc; padding: 14px; text-align:center; border-radius: 8px;">
@@ -434,7 +434,7 @@ exports.sendResetOtp = async (req, res) => {
                         <p>This OTP is valid for <b>10 minutes</b>.</p>
                         <p>If you did not request this, please ignore this email.</p>
                         <br/>
-                        <p>Regards,<br/>ShopEase Team</p>
+                        <p>Regards,<br/>AshoNex Team</p>
                     </div>`
         });
 
