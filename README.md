@@ -1,4 +1,4 @@
-# 🧵 UV Capitals Backend (Node.js + PostgreSQL)
+# 🧵 AshoNex Backend (Node.js + PostgreSQL)
 
 **Unified Vision Capital is an Investment Banking firm based in Noida. We work with companies to raise funds, manage/advise transactions, and connect them with the right investors.**
 
